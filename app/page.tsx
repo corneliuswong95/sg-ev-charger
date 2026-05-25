@@ -15,6 +15,9 @@ const MapView = dynamic(() => import('@/components/MapView'), {
   loading: () => null,
 });
 
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 2000;
+
 export default function Home() {
   const [chargers, setChargers]     = useState<Charger[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -25,28 +28,42 @@ export default function Home() {
   const [userPos, setUserPos]       = useState<[number, number] | null>(null);
 
   const mapRef = useRef<MapHandle | null>(null);
+  const inFlight = useRef<AbortController | null>(null);
 
-  async function loadChargers(isRefresh = false) {
+  const loadChargers = useCallback(async (isRefresh = false, attempt = 1): Promise<void> => {
+    inFlight.current?.abort();
+    const ctrl = new AbortController();
+    inFlight.current = ctrl;
+
     if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+    else if (attempt === 1) setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch('/api/chargers');
+      const res = await fetch('/api/chargers', { signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Charger[] = await res.json();
+      if (ctrl.signal.aborted) return;
       setChargers(data);
+      setLoading(false);
+      setRefreshing(false);
     } catch (err) {
-      console.error(err);
-      setError('Failed to load charger data. Please try again.');
-    } finally {
+      if (ctrl.signal.aborted) return;
+      console.error(`[loadChargers] attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err);
+      if (attempt < MAX_ATTEMPTS) {
+        setTimeout(() => loadChargers(isRefresh, attempt + 1), RETRY_DELAY_MS);
+        return;
+      }
+      setError('Failed to load charger data. Tap to retry.');
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadChargers();
-  }, []);
+    return () => inFlight.current?.abort();
+  }, [loadChargers]);
 
   const filtered = useMemo(
     () => chargers.filter(c => matchesFilter(c, filter)),
@@ -110,7 +127,11 @@ export default function Home() {
 
       <ChargerSheet charger={selected} onClose={() => setSelected(null)} />
 
-      {error && <div className="toast show" onClick={() => setError(null)}>{error}</div>}
+      {error && (
+        <div className="toast show" onClick={() => loadChargers(false)}>
+          {error}
+        </div>
+      )}
     </>
   );
 }
