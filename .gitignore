@@ -11,3 +11,4 @@ dist/
 .idea/
 .claude/
 next-env.d.ts
+tsconfig.tsbuildinfo

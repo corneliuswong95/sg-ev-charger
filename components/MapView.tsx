@@ -14,6 +14,7 @@ export interface MapHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
+  getCenter: () => [number, number];
 }
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   onSelect: (c: Charger) => void;
   onMapClick: () => void;
   onReady: (handle: MapHandle) => void;
+  onMove?: (center: [number, number]) => void;
   userPos: [number, number] | null;
 }
 
@@ -61,9 +63,11 @@ function markerIcon(status: ReturnType<typeof getStatus>, maxKw: number) {
 function MapBindings({
   onMapClick,
   onReady,
+  onMove,
 }: {
   onMapClick: () => void;
   onReady: (h: MapHandle) => void;
+  onMove?: (center: [number, number]) => void;
 }) {
   const map = useMap();
   const readyRef = useRef(false);
@@ -72,9 +76,10 @@ function MapBindings({
     if (readyRef.current) return;
     readyRef.current = true;
     onReady({
-      zoomIn:  () => map.zoomIn(),
-      zoomOut: () => map.zoomOut(),
-      flyTo:   (lat, lng, zoom) => map.setView([lat, lng], zoom ?? Math.max(map.getZoom(), 15)),
+      zoomIn:  () => { map.zoomIn(); },
+      zoomOut: () => { map.zoomOut(); },
+      flyTo:   (lat, lng, zoom) => { map.setView([lat, lng], zoom ?? Math.max(map.getZoom(), 15)); },
+      getCenter: () => { const c = map.getCenter(); return [c.lat, c.lng]; },
     });
   }, [map, onReady]);
 
@@ -83,10 +88,20 @@ function MapBindings({
     return () => { map.off('click', onMapClick); };
   }, [map, onMapClick]);
 
+  useEffect(() => {
+    if (!onMove) return;
+    const handler = () => {
+      const c = map.getCenter();
+      onMove([c.lat, c.lng]);
+    };
+    map.on('moveend', handler);
+    return () => { map.off('moveend', handler); };
+  }, [map, onMove]);
+
   return null;
 }
 
-export default function MapView({ chargers, onSelect, onMapClick, onReady, userPos }: Props) {
+export default function MapView({ chargers, onSelect, onMapClick, onReady, onMove, userPos }: Props) {
   const markers = useMemo(
     () =>
       chargers.map(c => (
@@ -108,7 +123,7 @@ export default function MapView({ chargers, onSelect, onMapClick, onReady, userP
         maxZoom={19}
         attribution='© <a href="https://carto.com">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>'
       />
-      <MapBindings onMapClick={onMapClick} onReady={onReady} />
+      <MapBindings onMapClick={onMapClick} onReady={onReady} onMove={onMove} />
       <MarkerClusterGroup
         chunkedLoading
         maxClusterRadius={50}

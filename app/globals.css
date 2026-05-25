@@ -114,18 +114,28 @@ body {
 }
 
 /* ─── Filter chips ─── */
-.chips-row {
+.chips-wrap {
   position: fixed;
   top: calc(var(--safe-top) + 64px);
   left: 0;
   right: 0;
   z-index: 499;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.chips-wrap > * {
+  pointer-events: auto;
+}
+
+.chips-row {
+  display: flex;
   gap: 8px;
   padding: 0 16px;
   overflow-x: auto;
   scrollbar-width: none;
-  pointer-events: auto;
 }
 
 .chips-row::-webkit-scrollbar {
@@ -478,6 +488,294 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ─── Operator filter (dropdown) ─── */
+.op-filter {
+  position: relative;
+  padding: 0 16px;
+}
+
+.chip-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(96, 165, 250, 0.10);
+  border-color: rgba(96, 165, 250, 0.30);
+  color: var(--text);
+}
+
+.chip-op.active {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.55);
+  filter: none;
+}
+
+.chip-op svg {
+  opacity: 0.7;
+}
+
+.op-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 16px;
+  min-width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  padding: 6px;
+  z-index: 700;
+  overscroll-behavior: contain;
+}
+
+.op-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.op-menu-item:hover {
+  background: var(--surface2);
+}
+
+.op-menu-item.selected {
+  background: rgba(96, 165, 250, 0.18);
+}
+
+.op-menu-label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.op-menu-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.op-menu-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.op-menu-icon-all {
+  background: linear-gradient(135deg, #60a5fa, #4ade80);
+}
+
+/* ─── Operator icon (logo / letter badge) ─── */
+.op-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.op-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+/* ─── Nearby sheet (swipeable list) ─── */
+.nearby-sheet {
+  --nearby-y: calc(100% - 78px);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 550;
+  background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.55);
+  max-height: 80dvh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(var(--nearby-y));
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  touch-action: pan-y;
+}
+
+.nearby-sheet.expanded {
+  --nearby-y: 0%;
+}
+
+.nearby-handle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  position: relative;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nearby-handle {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.nearby-peek {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+}
+
+.nearby-peek-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nearby-peek-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nearby-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--muted);
+  padding-top: 8px;
+  transform: rotate(180deg);
+  transition: transform 0.25s;
+}
+
+.nearby-chevron.up {
+  transform: rotate(0deg);
+}
+
+.nearby-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px calc(var(--safe-bot) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nearby-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.nearby-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+
+.nearby-item:hover,
+.nearby-item:active {
+  background: var(--surface2);
+}
+
+.nearby-item.selected {
+  background: rgba(96, 165, 250, 0.14);
+}
+
+.nearby-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.nearby-item-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nearby-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.nearby-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nearby-dot.available { background: var(--green); }
+.nearby-dot.occupied  { background: var(--red); }
+.nearby-dot.unknown   { background: var(--muted); }
+
+.nearby-meta-sep {
+  opacity: 0.5;
+}
+
+.nearby-item-dist {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Lift the FAB stack above the collapsed nearby peek so they don't overlap. */
+.fab-cluster {
+  bottom: calc(var(--safe-bot) + 96px);
 }
 
 /* ─── Leaflet overrides ─── */

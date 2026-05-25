@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import FilterChips from '@/components/FilterChips';
+import OperatorFilter from '@/components/OperatorFilter';
 import Fabs from '@/components/Fabs';
 import ChargerSheet from '@/components/ChargerSheet';
+import NearbySheet from '@/components/NearbySheet';
 import type { MapHandle } from '@/components/MapView';
 import type { Charger, FilterKey } from '@/lib/types';
-import { matchesFilter } from '@/lib/chargers';
+import { matchesFilter, matchesOperator } from '@/lib/chargers';
 
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
@@ -20,13 +22,15 @@ const RETRY_DELAY_MS = 2000;
 const BG_REFRESH_MS = 2 * 60 * 1000;
 
 export default function Home() {
-  const [chargers, setChargers]     = useState<Charger[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]           = useState<string | null>(null);
-  const [filter, setFilter]         = useState<FilterKey>('all');
-  const [selected, setSelected]     = useState<Charger | null>(null);
-  const [userPos, setUserPos]       = useState<[number, number] | null>(null);
+  const [chargers, setChargers]       = useState<Charger[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [filter, setFilter]           = useState<FilterKey>('all');
+  const [operator, setOperator]       = useState<string | null>(null);
+  const [selected, setSelected]       = useState<Charger | null>(null);
+  const [userPos, setUserPos]         = useState<[number, number] | null>(null);
+  const [mapCenter, setMapCenter]     = useState<[number, number] | null>(null);
 
   const mapRef = useRef<MapHandle | null>(null);
   const inFlight = useRef<AbortController | null>(null);
@@ -81,8 +85,8 @@ export default function Home() {
   }, []);
 
   const filtered = useMemo(
-    () => chargers.filter(c => matchesFilter(c, filter)),
-    [chargers, filter],
+    () => chargers.filter(c => matchesFilter(c, filter) && matchesOperator(c, operator)),
+    [chargers, filter, operator],
   );
 
   const handleSelect = useCallback((c: Charger) => {
@@ -91,7 +95,11 @@ export default function Home() {
   }, []);
 
   const handleMapClick = useCallback(() => setSelected(null), []);
-  const handleMapReady = useCallback((h: MapHandle) => { mapRef.current = h; }, []);
+  const handleMapReady = useCallback((h: MapHandle) => {
+    mapRef.current = h;
+    setMapCenter(h.getCenter());
+  }, []);
+  const handleMapMove = useCallback((c: [number, number]) => setMapCenter(c), []);
 
   function handleRefresh() {
     setSelected(null);
@@ -114,6 +122,9 @@ export default function Home() {
     );
   }
 
+  const nearbyOrigin = userPos ?? mapCenter;
+  const originLabel: 'You' | 'Map center' = userPos ? 'You' : 'Map center';
+
   return (
     <>
       {loading && (
@@ -124,13 +135,17 @@ export default function Home() {
       )}
 
       <Header count={filtered.length} refreshing={refreshing} onRefresh={handleRefresh} />
-      <FilterChips active={filter} onChange={setFilter} />
+      <div className="chips-wrap">
+        <FilterChips active={filter} onChange={setFilter} />
+        <OperatorFilter chargers={chargers} value={operator} onChange={setOperator} />
+      </div>
 
       <MapView
         chargers={filtered}
         onSelect={handleSelect}
         onMapClick={handleMapClick}
         onReady={handleMapReady}
+        onMove={handleMapMove}
         userPos={userPos}
       />
 
@@ -138,6 +153,15 @@ export default function Home() {
         onZoomIn={() => mapRef.current?.zoomIn()}
         onZoomOut={() => mapRef.current?.zoomOut()}
         onLocate={locateUser}
+      />
+
+      <NearbySheet
+        chargers={filtered}
+        origin={nearbyOrigin}
+        originLabel={originLabel}
+        selectedId={selected?.id ?? null}
+        onSelect={handleSelect}
+        hidden={loading || !!selected}
       />
 
       <ChargerSheet charger={selected} onClose={() => setSelected(null)} />
