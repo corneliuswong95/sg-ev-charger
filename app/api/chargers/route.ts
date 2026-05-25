@@ -103,7 +103,7 @@ function normalize(s: RawStation, i: number): Charger | null {
   };
 }
 
-async function fetchFromLTA(key: string): Promise<Charger[]> {
+async function fetchLink(key: string): Promise<string> {
   const linkRes = await fetch(EVCBATCH_URL, {
     headers: { AccountKey: key, accept: 'application/json' },
     cache: 'no-store',
@@ -115,8 +115,52 @@ async function fetchFromLTA(key: string): Promise<Charger[]> {
   const envelope = (await linkRes.json()) as LTAEnvelope;
   const downloadUrl = envelope.value?.[0]?.Link ?? envelope.Link;
   if (!downloadUrl) throw new Error('LTA EVCBatch response missing Link.');
+  return downloadUrl;
+}
 
-  const dataRes = await fetch(downloadUrl, { cache: 'no-store' });
+function linkIsLive(url: string): boolean {
+  // Presigned URLs carry X-Amz-Date + X-Amz-Expires (seconds). If we can read
+  // both, skip dead links instead of wasting a round-trip.
+  try {
+    const u = new URL(url);
+    const date = u.searchParams.get('X-Amz-Date');
+    const expires = u.searchParams.get('X-Amz-Expires');
+    if (!date || !expires) return true;
+    // X-Amz-Date is ISO-basic: YYYYMMDDTHHMMSSZ
+    const iso = date.replace(
+      /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+      '$1-$2-$3T$4:$5:$6Z',
+    );
+    const issuedAt = Date.parse(iso);
+    if (!Number.isFinite(issuedAt)) return true;
+    const expiresMs = Number(expires) * 1000;
+    // Treat as dead if <10s of life remaining.
+    return issuedAt + expiresMs - Date.now() > 10_000;
+  } catch {
+    return true;
+  }
+}
+
+async function fetchFromLTA(key: string): Promise<Charger[]> {
+  let downloadUrl = await fetchLink(key);
+  let dataRes: Response;
+
+  if (linkIsLive(downloadUrl)) {
+    dataRes = await fetch(downloadUrl, { cache: 'no-store' });
+  } else {
+    console.warn('[LTA] EVCBatch returned a stale link; requesting a fresh one.');
+    downloadUrl = await fetchLink(key);
+    dataRes = await fetch(downloadUrl, { cache: 'no-store' });
+  }
+
+  if (dataRes.status === 403) {
+    // LTA occasionally re-hands a presigned URL whose 5-minute window is
+    // already burned. Retry once with a fresh envelope.
+    console.warn('[LTA] S3 returned 403; retrying with a fresh link.');
+    downloadUrl = await fetchLink(key);
+    dataRes = await fetch(downloadUrl, { cache: 'no-store' });
+  }
+
   if (!dataRes.ok) {
     const body = await dataRes.text();
     throw new Error(`LTA S3 ${dataRes.status}: ${body.slice(0, 300)}`);
