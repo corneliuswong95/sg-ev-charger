@@ -17,6 +17,7 @@ const MapView = dynamic(() => import('@/components/MapView'), {
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2000;
+const BG_REFRESH_MS = 2 * 60 * 1000;
 
 export default function Home() {
   const [chargers, setChargers]     = useState<Charger[]>([]);
@@ -64,6 +65,20 @@ export default function Home() {
     loadChargers();
     return () => inFlight.current?.abort();
   }, [loadChargers]);
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch('/api/chargers');
+        if (!res.ok) return;
+        const data: Charger[] = await res.json();
+        setChargers(data);
+      } catch {
+        // silent — leave existing data in place
+      }
+    }, BG_REFRESH_MS);
+    return () => clearInterval(id);
+  }, []);
 
   const filtered = useMemo(
     () => chargers.filter(c => matchesFilter(c, filter)),

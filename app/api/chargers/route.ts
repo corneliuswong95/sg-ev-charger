@@ -1,23 +1,41 @@
 import { NextResponse } from 'next/server';
-import type { Charger, ChargingPoint } from '@/lib/types';
+import type { Charger, PlugSummary } from '@/lib/types';
 
 const EVCBATCH_URL = 'https://datamall2.mytransport.sg/ltaodataservice/EVCBatch';
+const CACHE_TTL_MS = 60_000;
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
-interface LTAEVCBatchEnvelope {
+interface LTAEnvelope {
   value?: Array<{ Link?: string }>;
   Link?: string;
 }
 
-interface LTAStation {
+interface RawPlug {
+  plugType?: string;
+  current?: string;
+  powerRating?: string;
+  price?: string;
+  priceType?: string;
+}
+
+interface RawChargingPoint {
+  status?: string;
+  operator?: string;
+  plugTypes?: RawPlug[];
+}
+
+interface RawStation {
   address?: string;
   name?: string;
   longtitude?: string | number;
   latitude?: string | number;
   postalCode?: string;
-  chargingPoints?: ChargingPoint[];
+  chargingPoints?: RawChargingPoint[];
 }
+
+let cache: { data: Charger[]; expiresAt: number } | null = null;
+let inFlight: Promise<Charger[]> | null = null;
 
 function toNumber(v: unknown): number | null {
   if (v == null) return null;
@@ -25,22 +43,50 @@ function toNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function deriveAvailability(cps: ChargingPoint[]): { available: number; total: number } {
-  let available = 0;
+function summarizePlugs(cps: RawChargingPoint[]): { plugs: PlugSummary[]; maxKw: number; hasDC: boolean } {
+  const map = new Map<string, PlugSummary>();
+  let maxKw = 0;
+  let hasDC = false;
   for (const cp of cps) {
-    if (String(cp.status) === '1') available += 1;
+    for (const pt of cp.plugTypes ?? []) {
+      const kw = Number(pt.powerRating);
+      const safeKw = Number.isFinite(kw) ? kw : 0;
+      if (safeKw > maxKw) maxKw = safeKw;
+      if ((pt.current ?? '').toUpperCase() === 'DC') hasDC = true;
+      const key = `${pt.plugType}|${pt.current}|${safeKw}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        const priceNum = pt.price != null ? Number(pt.price) : undefined;
+        map.set(key, {
+          plugType: pt.plugType ?? 'Unknown',
+          current: pt.current ?? '',
+          kw: safeKw,
+          count: 1,
+          price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
+          priceType: pt.priceType,
+        });
+      }
+    }
   }
-  return { available, total: cps.length };
+  return {
+    plugs: [...map.values()].sort((a, b) => b.kw - a.kw),
+    maxKw,
+    hasDC,
+  };
 }
 
-function normalize(s: LTAStation, i: number): Charger | null {
+function normalize(s: RawStation, i: number): Charger | null {
   const lat = toNumber(s.latitude);
   const lng = toNumber(s.longtitude);
   if (lat == null || lng == null) return null;
 
   const cps = s.chargingPoints ?? [];
-  const { available, total } = deriveAvailability(cps);
+  const available = cps.filter(cp => String(cp.status) === '1').length;
+  const total = cps.length;
   const operator = cps.find(cp => cp.operator)?.operator ?? 'Unknown';
+  const { plugs, maxKw, hasDC } = summarizePlugs(cps);
 
   return {
     id: `${s.postalCode ?? 'sg'}-${i}-${lat.toFixed(5)}-${lng.toFixed(5)}`,
@@ -51,8 +97,67 @@ function normalize(s: LTAStation, i: number): Charger | null {
     operator,
     available,
     total,
-    chargingPoints: cps,
+    maxKw,
+    hasDC,
+    plugs,
   };
+}
+
+async function fetchFromLTA(key: string): Promise<Charger[]> {
+  const linkRes = await fetch(EVCBATCH_URL, {
+    headers: { AccountKey: key, accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!linkRes.ok) {
+    const body = await linkRes.text();
+    throw new Error(`LTA EVCBatch ${linkRes.status}: ${body.slice(0, 300)}`);
+  }
+  const envelope = (await linkRes.json()) as LTAEnvelope;
+  const downloadUrl = envelope.value?.[0]?.Link ?? envelope.Link;
+  if (!downloadUrl) throw new Error('LTA EVCBatch response missing Link.');
+
+  const dataRes = await fetch(downloadUrl, { cache: 'no-store' });
+  if (!dataRes.ok) {
+    const body = await dataRes.text();
+    throw new Error(`LTA S3 ${dataRes.status}: ${body.slice(0, 300)}`);
+  }
+
+  const raw = (await dataRes.json()) as unknown;
+  const stations: RawStation[] = (() => {
+    if (Array.isArray(raw)) return raw as RawStation[];
+    if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      for (const k of Object.keys(obj)) {
+        if (Array.isArray(obj[k])) return obj[k] as RawStation[];
+      }
+    }
+    return [];
+  })();
+
+  return stations
+    .map(normalize)
+    .filter((c): c is Charger => c !== null);
+}
+
+async function getChargers(key: string): Promise<{ data: Charger[]; fromCache: boolean }> {
+  if (cache && cache.expiresAt > Date.now()) {
+    return { data: cache.data, fromCache: true };
+  }
+  if (inFlight) {
+    const data = await inFlight;
+    return { data, fromCache: false };
+  }
+  inFlight = (async () => {
+    const data = await fetchFromLTA(key);
+    cache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+    return data;
+  })();
+  try {
+    const data = await inFlight;
+    return { data, fromCache: false };
+  } finally {
+    inFlight = null;
+  }
 }
 
 export async function GET() {
@@ -65,72 +170,17 @@ export async function GET() {
   }
 
   try {
-    const linkRes = await fetch(EVCBATCH_URL, {
-      headers: { AccountKey: key, accept: 'application/json' },
-      next: { revalidate: 60 },
-    });
-
-    if (!linkRes.ok) {
-      const body = await linkRes.text();
-      console.error(`[LTA] EVCBatch ${linkRes.status}: ${body.slice(0, 300)}`);
-      return NextResponse.json(
-        { error: `LTA EVCBatch ${linkRes.status}`, detail: body.slice(0, 300) },
-        { status: 502 },
-      );
-    }
-
-    const envelope = (await linkRes.json()) as LTAEVCBatchEnvelope;
-    const downloadUrl = envelope.value?.[0]?.Link ?? envelope.Link;
-    if (!downloadUrl) {
-      console.error('[LTA] EVCBatch missing Link in response:', envelope);
-      return NextResponse.json(
-        { error: 'LTA EVCBatch response missing Link.' },
-        { status: 502 },
-      );
-    }
-
-    const dataRes = await fetch(downloadUrl, { cache: 'no-store' });
-    if (!dataRes.ok) {
-      const body = await dataRes.text();
-      console.error(`[LTA] S3 ${dataRes.status}: ${body.slice(0, 300)}`);
-      return NextResponse.json(
-        { error: `LTA S3 download ${dataRes.status}`, detail: body.slice(0, 300) },
-        { status: 502 },
-      );
-    }
-
-    const raw = (await dataRes.json()) as unknown;
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      console.log('[LTA] S3 top-level keys:', Object.keys(raw as Record<string, unknown>));
-      const firstArrayKey = Object.entries(raw as Record<string, unknown>).find(
-        ([, v]) => Array.isArray(v),
-      )?.[0];
-      console.log('[LTA] first array key:', firstArrayKey,
-        'len:', firstArrayKey ? (raw as Record<string, unknown[]>)[firstArrayKey].length : 0);
-    } else if (Array.isArray(raw)) {
-      console.log('[LTA] S3 returned top-level array of length:', raw.length);
-      if (raw.length > 0) console.log('[LTA] first item keys:', Object.keys(raw[0] ?? {}));
-    }
-
-    const stations: LTAStation[] = (() => {
-      if (Array.isArray(raw)) return raw as LTAStation[];
-      if (raw && typeof raw === 'object') {
-        const obj = raw as Record<string, unknown>;
-        for (const key of Object.keys(obj)) {
-          if (Array.isArray(obj[key])) return obj[key] as LTAStation[];
-        }
-      }
-      return [];
-    })();
-
-    const chargers = stations
-      .map(normalize)
-      .filter((c): c is Charger => c !== null);
-
-    console.log(`[LTA] EVCBatch → ${chargers.length} chargers (raw ${stations.length})`);
-    return NextResponse.json(chargers);
+    const { data, fromCache } = await getChargers(key);
+    console.log(`[LTA] returned ${data.length} chargers (cache=${fromCache})`);
+    const res = NextResponse.json(data);
+    res.headers.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    return res;
   } catch (err) {
     console.error('[LTA] fetch failed:', err);
+    if (cache) {
+      console.log(`[LTA] returning stale cache (${cache.data.length} chargers)`);
+      return NextResponse.json(cache.data);
+    }
     return NextResponse.json(
       { error: 'Failed to reach LTA DataMall.', detail: String(err) },
       { status: 502 },

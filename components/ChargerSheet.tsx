@@ -1,7 +1,7 @@
 'use client';
 
-import type { Charger } from '@/lib/types';
-import { getStatus, getMaxKw, uniquePlugSummary, STATUS_LABEL } from '@/lib/chargers';
+import type { Charger, PlugSummary } from '@/lib/types';
+import { getStatus, STATUS_LABEL } from '@/lib/chargers';
 
 interface Props {
   charger: Charger | null;
@@ -34,8 +34,8 @@ export default function ChargerSheet({ charger, onClose }: Props) {
 
 function SheetBody({ charger, onClose }: { charger: Charger; onClose: () => void }) {
   const status  = getStatus(charger);
-  const maxKw   = getMaxKw(charger);
-  const plugs   = uniquePlugSummary(charger.chargingPoints);
+  const maxKw   = charger.maxKw;
+  const plugs   = charger.plugs;
   const isPulse = status === 'available';
   const fracColor =
     status === 'available' ? 'var(--green)' : status === 'occupied' ? 'var(--red)' : 'var(--text)';
@@ -87,7 +87,7 @@ function SheetBody({ charger, onClose }: { charger: Charger; onClose: () => void
         <>
           <div className="stat-label" style={{ marginBottom: 10 }}>Connectors</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-            {plugs.map((p, i) => (
+            {plugs.map((p: PlugSummary, i: number) => (
               <div
                 key={i}
                 style={{

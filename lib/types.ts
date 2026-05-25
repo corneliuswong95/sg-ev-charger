@@ -1,19 +1,10 @@
-export interface PlugType {
+export interface PlugSummary {
   plugType: string;
   current: string;
-  powerRating: string;
-  price?: string;
+  kw: number;
+  count: number;
+  price?: number;
   priceType?: string;
-  evIds?: Array<{ evCpId?: string; status?: string }>;
-}
-
-export interface ChargingPoint {
-  status: string;
-  operatingHours?: string;
-  operator?: string;
-  position?: string;
-  name?: string;
-  plugTypes?: PlugType[];
 }
 
 export interface Charger {
@@ -25,7 +16,9 @@ export interface Charger {
   operator: string;
   available: number;
   total: number;
-  chargingPoints: ChargingPoint[];
+  maxKw: number;
+  hasDC: boolean;
+  plugs: PlugSummary[];
 }
 
 export type Status = 'available' | 'occupied' | 'unknown';

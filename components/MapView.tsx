@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import type { Charger } from '@/lib/types';
-import { getStatus, getMaxKw } from '@/lib/chargers';
+import { getStatus } from '@/lib/chargers';
 
 const SG_CENTER: [number, number] = [1.3521, 103.8198];
 const ZOOM_INIT = 12;
@@ -21,6 +22,23 @@ interface Props {
   onMapClick: () => void;
   onReady: (handle: MapHandle) => void;
   userPos: [number, number] | null;
+}
+
+function clusterIcon(cluster: { getChildCount: () => number }) {
+  const count = cluster.getChildCount();
+  const size = count < 10 ? 36 : count < 100 ? 44 : 54;
+  return L.divIcon({
+    html: `<div style="
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:rgba(74,222,128,0.85);
+      border:2px solid rgba(13,13,13,0.8);
+      box-shadow:0 2px 12px rgba(0,0,0,.5);
+      display:flex;align-items:center;justify-content:center;
+      color:#0d0d0d;font-weight:800;font-size:${count < 100 ? 14 : 13}px;
+    ">${count}</div>`,
+    iconSize: [size, size],
+    className: '',
+  });
 }
 
 function markerIcon(status: ReturnType<typeof getStatus>, maxKw: number) {
@@ -75,7 +93,7 @@ export default function MapView({ chargers, onSelect, onMapClick, onReady, userP
         <Marker
           key={c.id}
           position={[c.lat, c.lng]}
-          icon={markerIcon(getStatus(c), getMaxKw(c))}
+          icon={markerIcon(getStatus(c), c.maxKw)}
           eventHandlers={{ click: () => onSelect(c) }}
         />
       )),
@@ -91,7 +109,14 @@ export default function MapView({ chargers, onSelect, onMapClick, onReady, userP
         attribution='© <a href="https://carto.com">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>'
       />
       <MapBindings onMapClick={onMapClick} onReady={onReady} />
-      {markers}
+      <MarkerClusterGroup
+        chunkedLoading
+        maxClusterRadius={50}
+        showCoverageOnHover={false}
+        iconCreateFunction={clusterIcon}
+      >
+        {markers}
+      </MarkerClusterGroup>
       {userPos && (
         <CircleMarker
           center={userPos}
