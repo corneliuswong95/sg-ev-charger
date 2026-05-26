@@ -23,7 +23,7 @@ export function matchesOperator(c: Charger, operatorKey: string | null): boolean
 
 export const STATUS_LABEL: Record<Status, string> = {
   available: 'Available',
-  occupied:  'In Use',
+  occupied:  'Fully Occupied',
   unknown:   'Status Unknown',
 };
 
