@@ -1,19 +1,35 @@
-import type { Charger, Status, FilterKey } from './types';
+import type { Charger, Current, FilterKey, Status } from './types';
 import { resolveOperator } from './operators';
+
+export const FAST_KW = 50;
 
 export function getStatus(c: Charger): Status {
   if (c.available > 0) return 'available';
-  if (c.total > 0)     return 'occupied';
-  return 'unknown';
+  if (c.occupied > 0) return 'occupied';
+  return 'offline';
 }
 
-export function matchesFilter(c: Charger, filter: FilterKey): boolean {
-  switch (filter) {
-    case 'available': return getStatus(c) === 'available';
-    case 'fast':      return c.maxKw >= 50;
-    case 'dc':        return c.hasDC;
-    default:          return true;
+export const STATUS_LABEL: Record<Status, string> = {
+  available: 'Available',
+  occupied: 'Fully occupied',
+  offline: 'No live status',
+};
+
+/** Short label for lists, e.g. "3 free", "Full", "Offline". */
+export function availabilityShort(c: Charger): string {
+  const s = getStatus(c);
+  if (s === 'available') return `${c.available} free`;
+  if (s === 'occupied') return 'Full';
+  return 'No status';
+}
+
+export function matchesFilters(c: Charger, filters: FilterKey[]): boolean {
+  for (const f of filters) {
+    if (f === 'available' && getStatus(c) !== 'available') return false;
+    if (f === 'fast' && c.maxKw < FAST_KW) return false;
+    if (f === 'dc' && !c.hasDC) return false;
   }
+  return true;
 }
 
 export function matchesOperator(c: Charger, operatorKey: string | null): boolean {
@@ -21,29 +37,18 @@ export function matchesOperator(c: Charger, operatorKey: string | null): boolean
   return resolveOperator(c.operator).key === operatorKey;
 }
 
-export const STATUS_LABEL: Record<Status, string> = {
-  available: 'Available',
-  occupied:  'Fully Occupied',
-  unknown:   'Status Unknown',
-};
-
-export function distanceKm(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
+export function matchesQuery(c: Charger, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = `${c.name} ${c.address} ${c.postalCode} ${resolveOperator(c.operator).label}`.toLowerCase();
+  return q.split(/\s+/).every(t => hay.includes(t));
 }
 
-export function formatDistance(km: number): string {
-  if (!Number.isFinite(km)) return '';
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  if (km < 10) return `${km.toFixed(1)} km`;
-  return `${Math.round(km)} km`;
+/** Most powerful connector of a current type with the station's cheapest price for it. */
+export function cheapestConnector(c: Charger, current: Current) {
+  const price = c.minPrice[current];
+  if (price == null) return null;
+  return c.connectors
+    .filter(k => k.current === current && k.price === price)
+    .sort((a, b) => b.kw - a.kw)[0] ?? null;
 }

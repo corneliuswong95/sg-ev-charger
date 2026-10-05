@@ -1,24 +1,30 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
-import type { Charger } from '@/lib/types';
-import { getStatus } from '@/lib/chargers';
+import type { Charger, Status } from '@/lib/types';
+import { FAST_KW, getStatus } from '@/lib/chargers';
 
 const SG_CENTER: [number, number] = [1.3521, 103.8198];
 const ZOOM_INIT = 12;
+// OneMap only covers Singapore.
+const SG_BOUNDS: [[number, number], [number, number]] = [[1.14, 103.55], [1.50, 104.12]];
 
 export interface MapHandle {
   zoomIn: () => void;
   zoomOut: () => void;
-  flyTo: (lat: number, lng: number, zoom?: number) => void;
+  /** `offset` shifts the view (px) so the station isn't hidden under a sheet. */
+  flyTo: (lat: number, lng: number, zoom?: number, offset?: [number, number]) => void;
+  /** Fit the view to these points, keeping `padding` px clear [top, right, bottom, left]. */
+  fitBounds: (points: [number, number][], padding: [number, number, number, number]) => void;
   getCenter: () => [number, number];
 }
 
 interface Props {
   chargers: Charger[];
+  selected: Charger | null;
   onSelect: (c: Charger) => void;
   onMapClick: () => void;
   onReady: (handle: MapHandle) => void;
@@ -26,37 +32,48 @@ interface Props {
   userPos: [number, number] | null;
 }
 
-function clusterIcon(cluster: { getChildCount: () => number }) {
-  const count = cluster.getChildCount();
-  const size = count < 10 ? 36 : count < 100 ? 44 : 54;
-  return L.divIcon({
-    html: `<div style="
-      width:${size}px;height:${size}px;border-radius:50%;
-      background:rgba(74,222,128,0.85);
-      border:2px solid rgba(13,13,13,0.8);
-      box-shadow:0 2px 12px rgba(0,0,0,.5);
-      display:flex;align-items:center;justify-content:center;
-      color:#0d0d0d;font-weight:800;font-size:${count < 100 ? 14 : 13}px;
-    ">${count}</div>`,
-    iconSize: [size, size],
-    className: '',
+// Icons are cached by appearance so unchanged markers keep the same icon
+// object and Leaflet doesn't re-render their DOM on every data refresh.
+const iconCache = new Map<string, L.DivIcon>();
+
+function pinIcon(status: Status, free: number, fast: boolean, selected = false): L.DivIcon {
+  const label = status === 'offline' ? '–' : String(Math.min(free, 99));
+  const key = `${status}|${label}|${fast}|${selected}`;
+  const hit = iconCache.get(key);
+  if (hit) return hit;
+  const w = fast ? 34 : 28;
+  const h = w + 6;
+  const cls = `pin pin-${status}${fast ? ' pin-fast' : ''}${selected ? ' pin-selected' : ''}`;
+  const icon = L.divIcon({
+    html: `<div class="${cls}">${label}</div>`,
+    className: `pin-wrap pin-wrap-${status}`,
+    iconSize: [w, h],
+    iconAnchor: [w / 2, h],
   });
+  iconCache.set(key, icon);
+  return icon;
 }
 
-function markerIcon(status: ReturnType<typeof getStatus>, maxKw: number) {
-  const colors = { available: '#4ade80', occupied: '#f87171', unknown: '#888' };
-  const c = colors[status] ?? colors.unknown;
-  const isFast = maxKw >= 50;
-  const size = isFast ? 34 : 26;
+// Minimal shape of leaflet.markercluster's cluster (not in @types/leaflet).
+interface Cluster {
+  getAllChildMarkers(): L.Marker[];
+}
+
+function clusterIcon(cluster: Cluster) {
+  const markers = cluster.getAllChildMarkers();
+  const count = markers.length;
+  let free = 0;
+  for (const m of markers) {
+    const cls = (m.options.icon?.options as L.DivIconOptions | undefined)?.className ?? '';
+    if (cls.includes('pin-wrap-available')) free++;
+  }
+  const pct = Math.round((free / count) * 100);
+  const size = count < 10 ? 34 : count < 100 ? 40 : 48;
   return L.divIcon({
-    html: `
-      <div style="position:relative;width:${size}px;height:${size}px;">
-        <div style="position:absolute;inset:0;background:${c};border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid rgba(0,0,0,.4);box-shadow:0 2px 10px rgba(0,0,0,.5);"></div>
-        <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${isFast ? 14 : 11}px;">⚡</span>
-      </div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size],
+    // Ring shows the share of stations here with a free connector.
+    html: `<div class="cluster" style="background:conic-gradient(var(--go-fill) ${pct}%, #fff ${pct}% 100%)"><span>${count}</span></div>`,
     className: '',
+    iconSize: [size, size],
   });
 }
 
@@ -76,9 +93,25 @@ function MapBindings({
     if (readyRef.current) return;
     readyRef.current = true;
     onReady({
-      zoomIn:  () => { map.zoomIn(); },
+      zoomIn: () => { map.zoomIn(); },
       zoomOut: () => { map.zoomOut(); },
-      flyTo:   (lat, lng, zoom) => { map.setView([lat, lng], zoom ?? Math.max(map.getZoom(), 15)); },
+      flyTo: (lat, lng, zoom, offset) => {
+        const z = zoom ?? Math.max(map.getZoom(), 16);
+        let target = L.latLng(lat, lng);
+        if (offset && (offset[0] || offset[1])) {
+          target = map.unproject(map.project(target, z).add(L.point(offset[0], offset[1])), z);
+        }
+        map.flyTo(target, z, { duration: 0.6 });
+      },
+      fitBounds: (points, [top, right, bottom, left]) => {
+        if (points.length === 0) return;
+        map.flyToBounds(L.latLngBounds(points), {
+          paddingTopLeft: [left, top],
+          paddingBottomRight: [right, bottom],
+          maxZoom: 16,
+          duration: 0.6,
+        });
+      },
       getCenter: () => { const c = map.getCenter(); return [c.lat, c.lng]; },
     });
   }, [map, onReady]);
@@ -101,44 +134,65 @@ function MapBindings({
   return null;
 }
 
-export default function MapView({ chargers, onSelect, onMapClick, onReady, onMove, userPos }: Props) {
+const userIcon = () =>
+  L.divIcon({ html: '<div class="user-dot"></div>', className: '', iconSize: [18, 18] });
+
+export default function MapView({
+  chargers, selected, onSelect, onMapClick, onReady, onMove, userPos,
+}: Props) {
   const markers = useMemo(
     () =>
       chargers.map(c => (
         <Marker
           key={c.id}
           position={[c.lat, c.lng]}
-          icon={markerIcon(getStatus(c), c.maxKw)}
+          icon={pinIcon(getStatus(c), c.available, c.maxKw >= FAST_KW)}
+          title={c.name}
           eventHandlers={{ click: () => onSelect(c) }}
         />
       )),
     [chargers, onSelect],
   );
 
+  const you = useMemo(userIcon, []);
+
   return (
-    <MapContainer center={SG_CENTER} zoom={ZOOM_INIT} zoomControl={false}>
+    <MapContainer
+      center={SG_CENTER}
+      zoom={ZOOM_INIT}
+      zoomControl={false}
+      minZoom={11}
+      maxBounds={SG_BOUNDS}
+      maxBoundsViscosity={0.8}
+    >
+      {/* OneMap (Singapore Land Authority) — free, no key, attribution required. */}
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        subdomains={['a', 'b', 'c', 'd']}
+        url="https://www.onemap.gov.sg/maps/tiles/Grey/{z}/{x}/{y}.png"
+        minZoom={11}
         maxZoom={19}
-        attribution='© <a href="https://carto.com">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>'
+        detectRetina
+        attribution='<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:14px;width:14px;vertical-align:-3px"/>&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;&#124;&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>'
       />
       <MapBindings onMapClick={onMapClick} onReady={onReady} onMove={onMove} />
       <MarkerClusterGroup
         chunkedLoading
-        maxClusterRadius={50}
+        maxClusterRadius={64}
+        disableClusteringAtZoom={16}
         showCoverageOnHover={false}
+        spiderfyOnMaxZoom={false}
         iconCreateFunction={clusterIcon}
       >
         {markers}
       </MarkerClusterGroup>
-      {userPos && (
-        <CircleMarker
-          center={userPos}
-          radius={9}
-          pathOptions={{ color: '#60a5fa', fillColor: '#60a5fa', fillOpacity: 0.85, weight: 2 }}
+      {selected && (
+        <Marker
+          position={[selected.lat, selected.lng]}
+          icon={pinIcon(getStatus(selected), selected.available, selected.maxKw >= FAST_KW, true)}
+          zIndexOffset={1000}
+          interactive={false}
         />
       )}
+      {userPos && <Marker position={userPos} icon={you} interactive={false} zIndexOffset={900} />}
     </MapContainer>
   );
 }

@@ -4,19 +4,20 @@ A mobile-first web app showing real-time EV charger availability across Singapor
 
 ## Features
 
-- Live `Available / Total` count per station
-- Operator (SP Mobility, Strides YTL, Charge+, BlueSG, etc.)
-- Connector breakdown — plug type, AC/DC, kW, price per kWh
-- Filter chips: All / Available / Fast (≥50 kW) / DC only
-- Tap a pin → bottom sheet → Navigate (opens Apple Maps on iOS, Google Maps elsewhere)
-- "My location" button
-- Dark mode-only, optimized for phone viewports
+- **Map** — every public charger in Singapore; each pin shows how many connectors are free right now (green = free, red = all in use, grey = no live status, yellow corner = 50 kW+)
+- **Search** by place, street, postcode or operator; filters for available now, fast (50 kW+), DC, and operator
+- **Station details** — per-connector type, power, live status and price per kWh
+- **Prices tab** — every charger ranked cheapest first (AC or DC), plus an operator comparison
+- **Extra charges** — idle fees and other time-based charges from each operator's published terms, with sources, and whether they apply at that station
+- **Parking** — for stations in HDB car parks (~1,900 of them): HDB rates, day/night caps, free parking on Sundays and public holidays, and live free car lots
+- Get directions (Apple Maps on iOS, Google Maps elsewhere)
 
 ## Tech stack
 
 - **Next.js 14** (App Router, TypeScript)
 - **react-leaflet** + CartoDB dark tiles
-- **LTA DataMall** EVCBatch endpoint (server-side proxied)
+- **LTA DataMall** EVCBatch and CarParkAvailabilityv2 (server-side proxied)
+- **data.gov.sg** HDB Carpark Information
 
 ## Setup
 
@@ -72,22 +73,27 @@ Render auto-deploys on every `git push origin main`.
 
 ```
 app/
-├── api/chargers/route.ts   # LTA proxy
-├── globals.css             # dark theme + sheet/marker styles
-├── layout.tsx
-├── page.tsx                # main composition + state
-└── icon.svg                # favicon
+├── api/chargers/route.ts        # normalized chargers (LTA + HDB match)
+├── api/carparks/[code]/route.ts # one HDB car park + live lots
+├── globals.css                  # design tokens + all styles
+├── layout.tsx                   # fonts (Barlow / Barlow Condensed)
+└── page.tsx                     # state holder
 components/
-├── ChargerSheet.tsx        # bottom sheet
-├── Fabs.tsx                # zoom + locate buttons
-├── FilterChips.tsx
-├── Header.tsx              # logo + count + refresh
-└── MapView.tsx             # react-leaflet (dynamic, ssr:false)
+├── MapView.tsx                  # react-leaflet (dynamic, ssr:false)
+├── TopBar.tsx                   # search + filters
+├── StationListSheet.tsx         # swipeable list of nearby / matching stations
+├── ChargerSheet.tsx             # station details, fees, parking
+├── PricesView.tsx               # cheapest-first ranking + operator comparison
+└── TabBar.tsx, Fabs.tsx, …
 lib/
-├── chargers.ts             # getStatus / getMaxKw / matchesFilter / uniquePlugSummary
-└── types.ts                # Charger, ChargingPoint, PlugType
+├── server/                      # LTA + data.gov.sg clients, caches, normalizer
+├── tariffs.ts                   # curated idle / time-based fees with sources
+├── parking.ts                   # HDB parking rules
+├── chargers.ts                  # status / filter helpers
+├── operators.ts                 # brand names + logos
+└── types.ts
 ```
 
 ## License
 
-MIT. Data © LTA Singapore, used under the [LTA DataMall terms](https://datamall.lta.gov.sg/content/datamall/en/SingaporeOpenDataLicence.html).
+MIT. Data © LTA Singapore and HDB, used under the [Singapore Open Data Licence](https://datamall.lta.gov.sg/content/datamall/en/SingaporeOpenDataLicence.html). Operator fee details are summarised from each operator's published terms (linked in the app).

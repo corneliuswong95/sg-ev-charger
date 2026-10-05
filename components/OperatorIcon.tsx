@@ -6,10 +6,9 @@ import { resolveOperator, operatorLogoUrl, operatorInitials } from '@/lib/operat
 interface Props {
   operator: string;
   size?: number;
-  className?: string;
 }
 
-export default function OperatorIcon({ operator, size = 28, className }: Props) {
+export default function OperatorIcon({ operator, size = 28 }: Props) {
   const meta = resolveOperator(operator);
   const url = operatorLogoUrl(meta, Math.max(32, size * 2));
   const [errored, setErrored] = useState(false);
@@ -17,26 +16,21 @@ export default function OperatorIcon({ operator, size = 28, className }: Props) 
 
   return (
     <span
-      className={`op-icon${className ? ' ' + className : ''}`}
+      className="op-icon"
       style={{
         width: size,
         height: size,
+        borderRadius: Math.round(size * 0.28),
         background: showLogo ? '#fff' : meta.color,
         color: '#fff',
-        fontSize: Math.round(size * 0.42),
+        fontSize: Math.round(size * 0.4),
       }}
-      aria-label={meta.label}
       title={meta.label}
+      aria-hidden
     >
       {showLogo ? (
-        <img
-          src={url}
-          alt=""
-          width={size}
-          height={size}
-          referrerPolicy="no-referrer"
-          onError={() => setErrored(true)}
-        />
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setErrored(true)} />
       ) : (
         operatorInitials(meta)
       )}

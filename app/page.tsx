@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import Header from '@/components/Header';
-import FilterChips from '@/components/FilterChips';
-import OperatorFilter from '@/components/OperatorFilter';
+import TopBar from '@/components/TopBar';
 import Fabs from '@/components/Fabs';
 import ChargerSheet from '@/components/ChargerSheet';
-import NearbySheet from '@/components/NearbySheet';
+import StationListSheet from '@/components/StationListSheet';
+import PricesView from '@/components/PricesView';
+import TabBar, { type Tab } from '@/components/TabBar';
+import { BoltIcon } from '@/components/Icons';
 import type { MapHandle } from '@/components/MapView';
-import type { Charger, FilterKey } from '@/lib/types';
-import { matchesFilter, matchesOperator } from '@/lib/chargers';
+import type { Charger, ChargersResponse, FilterKey } from '@/lib/types';
+import { matchesFilters, matchesOperator, matchesQuery } from '@/lib/chargers';
 
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
@@ -20,20 +21,49 @@ const MapView = dynamic(() => import('@/components/MapView'), {
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2000;
 const BG_REFRESH_MS = 2 * 60 * 1000;
+const SEARCH_FIT_DELAY_MS = 450;
+const DESKTOP = '(min-width: 768px)';
+
+const isDesktop = () => typeof window !== 'undefined' && window.matchMedia(DESKTOP).matches;
+
+/** Pixel shift so a flown-to station lands in the part of the map not covered by a sheet. */
+function sheetOffset(): [number, number] {
+  if (typeof window === 'undefined') return [0, 0];
+  if (isDesktop()) return [-212, 0];
+  // Detail sheet covers the bottom ~72%; put the pin in the strip above it.
+  return [0, Math.round(window.innerHeight * 0.3)];
+}
+
+/** Map area left visible by the top bar and sheets: [top, right, bottom, left]. */
+function visiblePadding(): [number, number, number, number] {
+  if (isDesktop()) return [40, 60, 40, 440];
+  // Mobile: list sheet expands over most of the screen while searching, so
+  // fit into the strip under the top bar.
+  return [130, 30, Math.round(window.innerHeight * 0.62), 30];
+}
+
+type Notice = { message: string; retry: boolean };
 
 export default function Home() {
-  const [chargers, setChargers]       = useState<Charger[]>([]);
+  const [data, setData]               = useState<ChargersResponse>({ updatedAt: null, chargers: [] });
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
-  const [error, setError]             = useState<string | null>(null);
-  const [filter, setFilter]           = useState<FilterKey>('all');
+  const [notice, setNotice]           = useState<Notice | null>(null);
+  const [tab, setTab]                 = useState<Tab>('map');
+  const [pricesVisited, setPricesVisited] = useState(false);
+  const [filters, setFilters]         = useState<FilterKey[]>([]);
   const [operator, setOperator]       = useState<string | null>(null);
-  const [selected, setSelected]       = useState<Charger | null>(null);
+  const [query, setQuery]             = useState('');
+  const [selectedId, setSelectedId]   = useState<string | null>(null);
+  const [listExpanded, setListExpanded] = useState(false);
   const [userPos, setUserPos]         = useState<[number, number] | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [mapCenter, setMapCenter]     = useState<[number, number] | null>(null);
 
   const mapRef = useRef<MapHandle | null>(null);
+  const mapUiRef = useRef<HTMLDivElement | null>(null);
   const inFlight = useRef<AbortController | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   const loadChargers = useCallback(async (isRefresh = false, attempt = 1): Promise<void> => {
     inFlight.current?.abort();
@@ -42,14 +72,14 @@ export default function Home() {
 
     if (isRefresh) setRefreshing(true);
     else if (attempt === 1) setLoading(true);
-    setError(null);
+    setNotice(null);
 
     try {
       const res = await fetch('/api/chargers', { signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: Charger[] = await res.json();
+      const body: ChargersResponse = await res.json();
       if (ctrl.signal.aborted) return;
-      setChargers(data);
+      setData(body);
       setLoading(false);
       setRefreshing(false);
     } catch (err) {
@@ -59,7 +89,7 @@ export default function Home() {
         setTimeout(() => loadChargers(isRefresh, attempt + 1), RETRY_DELAY_MS);
         return;
       }
-      setError('Failed to load charger data. Tap to retry.');
+      setNotice({ message: 'Couldn’t load live charger data from LTA.', retry: true });
       setLoading(false);
       setRefreshing(false);
     }
@@ -75,100 +105,205 @@ export default function Home() {
       try {
         const res = await fetch('/api/chargers');
         if (!res.ok) return;
-        const data: Charger[] = await res.json();
-        setChargers(data);
+        setData(await res.json());
       } catch {
-        // silent — leave existing data in place
+        // silent — keep the data we have
       }
     }, BG_REFRESH_MS);
     return () => clearInterval(id);
   }, []);
 
+  // Keep hidden map controls out of the tab order and accessibility tree
+  // while the Prices tab covers them. (React 18 has no `inert` prop.)
+  useEffect(() => {
+    const el = mapUiRef.current;
+    if (!el) return;
+    el.toggleAttribute('inert', tab === 'prices');
+    el.setAttribute('aria-hidden', String(tab === 'prices'));
+  }, [tab]);
+
+  const chargers = data.chargers;
+
+  // Everything except the operator filter, so the operator menu can show
+  // counts that match what the user would get.
+  const preOperator = useMemo(
+    () => chargers.filter(c => matchesFilters(c, filters) && matchesQuery(c, query)),
+    [chargers, filters, query],
+  );
   const filtered = useMemo(
-    () => chargers.filter(c => matchesFilter(c, filter) && matchesOperator(c, operator)),
-    [chargers, filter, operator],
+    () => preOperator.filter(c => matchesOperator(c, operator)),
+    [preOperator, operator],
   );
 
+  // Look the selection up by id so an open sheet picks up refreshed availability.
+  const selected = useMemo(
+    () => (selectedId ? chargers.find(c => c.id === selectedId) ?? null : null),
+    [chargers, selectedId],
+  );
+
+  // Move the map to search results once the user pauses typing.
+  useEffect(() => {
+    if (!query.trim() || filtered.length === 0 || filtered.length > 400) return;
+    const t = setTimeout(() => {
+      mapRef.current?.fitBounds(filtered.map(c => [c.lat, c.lng]), visiblePadding());
+    }, SEARCH_FIT_DELAY_MS);
+    return () => clearTimeout(t);
+    // Only re-fit when the query (or the matching set) changes, not on data refresh.
+  }, [query, filtered.length]);
+
   const handleSelect = useCallback((c: Charger) => {
-    setSelected(c);
-    mapRef.current?.flyTo(c.lat, c.lng);
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      openerRef.current = document.activeElement;
+    }
+    setSelectedId(c.id);
+    setTab('map');
+    mapRef.current?.flyTo(c.lat, c.lng, undefined, sheetOffset());
   }, []);
 
-  const handleMapClick = useCallback(() => setSelected(null), []);
+  const closeSheet = useCallback(() => {
+    setSelectedId(null);
+    // Return focus to whatever opened the sheet, if it's still on screen.
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (opener?.isConnected) requestAnimationFrame(() => opener.focus({ preventScroll: true }));
+  }, []);
+
   const handleMapReady = useCallback((h: MapHandle) => {
     mapRef.current = h;
     setMapCenter(h.getCenter());
   }, []);
   const handleMapMove = useCallback((c: [number, number]) => setMapCenter(c), []);
 
-  function handleRefresh() {
-    setSelected(null);
-    loadChargers(true);
+  function handleQuery(q: string) {
+    setQuery(q);
+    if (q.trim() && !query.trim()) setListExpanded(true);
   }
 
-  function locateUser() {
+  function toggleFilter(k: FilterKey) {
+    setFilters(f => (f.includes(k) ? f.filter(x => x !== k) : [...f, k]));
+  }
+
+  function clearFilters() {
+    setFilters([]);
+    setOperator(null);
+    setQuery('');
+  }
+
+  function changeTab(t: Tab) {
+    setTab(t);
+    if (t === 'prices') setPricesVisited(true);
+  }
+
+  function locateUser(fly = true) {
     if (!navigator.geolocation) {
-      setError('Geolocation not supported on this device.');
+      setLocationDenied(true);
+      setNotice({ message: 'This browser can’t share your location.', retry: false });
       return;
     }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const ll: [number, number] = [coords.latitude, coords.longitude];
         setUserPos(ll);
-        mapRef.current?.flyTo(ll[0], ll[1], 15);
+        setLocationDenied(false);
+        if (fly) {
+          setListExpanded(false);
+          mapRef.current?.flyTo(ll[0], ll[1], 15);
+        }
       },
-      () => setError('Could not get your location.'),
+      () => {
+        setLocationDenied(true);
+        setNotice({
+          message: 'Location is off. Allow location access in your browser to sort chargers by distance.',
+          retry: false,
+        });
+      },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
 
-  const nearbyOrigin = userPos ?? mapCenter;
-  const originLabel: 'You' | 'Map center' = userPos ? 'You' : 'Map center';
+  const origin = userPos ?? mapCenter;
+  const hasFilters = filters.length > 0 || operator != null;
 
   return (
     <>
       {loading && (
-        <div className="loading-screen">
-          <div className="spinner" />
-          <div className="loading-label">Loading EV chargers…</div>
+        <div className="loading-screen" role="status">
+          <div className="loading-mark"><BoltIcon size={32} /></div>
+          <div className="loading-label">Loading live charger data</div>
         </div>
       )}
 
-      <Header count={filtered.length} refreshing={refreshing} onRefresh={handleRefresh} />
-      <div className="chips-wrap">
-        <FilterChips active={filter} onChange={setFilter} />
-        <OperatorFilter chargers={chargers} value={operator} onChange={setOperator} />
+      <div ref={mapUiRef}>
+        <MapView
+          chargers={filtered}
+          selected={selected}
+          onSelect={handleSelect}
+          onMapClick={closeSheet}
+          onReady={handleMapReady}
+          onMove={handleMapMove}
+          userPos={userPos}
+        />
+
+        <TopBar
+          query={query}
+          onQueryChange={handleQuery}
+          filters={filters}
+          onToggleFilter={toggleFilter}
+          operatorSource={preOperator}
+          operator={operator}
+          onOperatorChange={setOperator}
+          refreshing={refreshing}
+          onRefresh={() => loadChargers(true)}
+        />
+
+        <Fabs
+          onZoomIn={() => mapRef.current?.zoomIn()}
+          onZoomOut={() => mapRef.current?.zoomOut()}
+          onLocate={() => locateUser(true)}
+          located={userPos != null}
+          hidden={listExpanded}
+        />
+
+        <StationListSheet
+          chargers={filtered}
+          origin={origin}
+          originIsUser={userPos != null}
+          query={query}
+          updatedAt={data.updatedAt}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          expanded={listExpanded}
+          onExpandedChange={setListExpanded}
+          hasFilters={hasFilters}
+          onClearFilters={clearFilters}
+          onClearSearch={() => setQuery('')}
+        />
       </div>
 
-      <MapView
-        chargers={filtered}
-        onSelect={handleSelect}
-        onMapClick={handleMapClick}
-        onReady={handleMapReady}
-        onMove={handleMapMove}
-        userPos={userPos}
-      />
+      {pricesVisited && (
+        <div hidden={tab !== 'prices'}>
+          <PricesView
+            chargers={chargers}
+            updatedAt={data.updatedAt}
+            userPos={userPos}
+            locationDenied={locationDenied}
+            onRequestLocation={() => locateUser(false)}
+            onOpenStation={handleSelect}
+          />
+        </div>
+      )}
 
-      <Fabs
-        onZoomIn={() => mapRef.current?.zoomIn()}
-        onZoomOut={() => mapRef.current?.zoomOut()}
-        onLocate={locateUser}
-      />
+      <TabBar tab={tab} onChange={changeTab} />
 
-      <NearbySheet
-        chargers={filtered}
-        origin={nearbyOrigin}
-        originLabel={originLabel}
-        selectedId={selected?.id ?? null}
-        onSelect={handleSelect}
-        hidden={loading || !!selected}
-      />
+      <ChargerSheet charger={selected} updatedAt={data.updatedAt} onClose={closeSheet} />
 
-      <ChargerSheet charger={selected} onClose={() => setSelected(null)} />
-
-      {error && (
-        <div className="toast show" onClick={() => loadChargers(false)}>
-          {error}
+      {notice && (
+        <div className="toast" role="alert">
+          <span>{notice.message}</span>
+          {notice.retry && (
+            <button onClick={() => { setNotice(null); loadChargers(chargers.length > 0); }}>Retry</button>
+          )}
+          <button onClick={() => setNotice(null)} aria-label="Dismiss">✕</button>
         </div>
       )}
     </>
