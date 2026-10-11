@@ -14,6 +14,8 @@ export interface Connector {
   price: number | null;
   /** Operator explicitly marked this connector as free (`priceType: "free"`). */
   free: boolean;
+  /** Set when `price` corrects a wrong LTA listing (see lib/priceCorrections.ts). */
+  correction?: { ltaPrice: number; note: string };
 }
 
 /** Where a station's parking info comes from. */

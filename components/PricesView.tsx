@@ -6,7 +6,7 @@ import { availabilityShort, cheapestConnector, getStatus } from '@/lib/chargers'
 import { resolveOperator } from '@/lib/operators';
 import { distanceKm } from '@/lib/geo';
 import { formatDistance, formatKw, formatPrice, formatTime } from '@/lib/format';
-import { timeFeeTag, TARIFFS, TARIFFS_CHECKED } from '@/lib/tariffs';
+import { tariffFor, timeFeeTag, TARIFFS, TARIFFS_CHECKED } from '@/lib/tariffs';
 import OperatorIcon from './OperatorIcon';
 import { CaretIcon, LocateIcon } from './Icons';
 
@@ -168,6 +168,7 @@ export default function PricesView({
                   <strong>{best.charger.name}</strong>
                   {resolveOperator(best.charger.operator).label}, {formatKw(best.kw)} kW
                   {best.distance != null ? `, ${formatDistance(best.distance)} away` : ''}
+                  {tariffFor(best.charger.operator)?.priceCaveat ? '. Check the operator’s app for the live price.' : ''}
                 </span>
               </button>
             ) : null}
@@ -242,6 +243,7 @@ function PriceRow({ row, rank, onOpen }: { row: Ranked; rank: number | null; onO
           <span><span className="num">{formatKw(row.kw)}</span> kW</span>
           {row.distance != null && <span className="num">{formatDistance(row.distance)}</span>}
           {feeTag && <span className={`fee-tag${feeTag.confirmed ? '' : ' muted'}`}>{feeTag.text}</span>}
+          {tariffFor(c.operator)?.priceCaveat && <span className="fee-tag muted">Check app price</span>}
         </span>
       </span>
       <span className="price-cell">

@@ -1,5 +1,6 @@
 import type { Charger, Connector, Current, HdbCarPark } from '@/lib/types';
 import type { ParkingMatcher } from './carparks';
+import { correctPrice } from '@/lib/priceCorrections';
 import { formatAddress, titleCase } from '@/lib/format';
 import type { RawChargingPoint, RawPlug, RawStation } from './lta';
 
@@ -118,7 +119,11 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
         for (const plug of cp.plugTypes ?? []) {
           const current: Current = (plug.current ?? '').toUpperCase() === 'DC' ? 'DC' : 'AC';
           const kw = toNumber(plug.powerRating) ?? 0;
-          const { price, free } = parsePrice(plug);
+          const parsed = parsePrice(plug);
+          const fix = correctPrice(rawName, rawAddress, operator, current, parsed.price)
+            ?? (s.name && s.name !== rawName ? correctPrice(s.name, rawAddress, operator, current, parsed.price) : null);
+          const price = fix ? fix.price : parsed.price;
+          const free = parsed.free;
           const counts = countConnectors(plug, cp);
           for (const e of plug.evIds ?? []) if (e.evCpId) evIds.push(e.evCpId);
 
@@ -144,6 +149,7 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
               count: counts.count,
               available: counts.available,
               offline: counts.offline,
+              ...(fix ? { correction: { ltaPrice: fix.ltaPrice, note: fix.note } } : {}),
             });
           }
         }

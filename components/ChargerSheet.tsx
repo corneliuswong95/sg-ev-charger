@@ -184,10 +184,18 @@ function SheetBody({
                   <span className="num">{formatKw(k.kw)}</span> kW, {k.count} connector{k.count > 1 ? 's' : ''},{' '}
                   {k.offline === k.count ? 'no live status' : `${k.available} free`}
                 </div>
+                {k.correction && (
+                  <div className="connector-fix">
+                    LTA lists {formatPrice(k.correction.ltaPrice)}. {k.correction.note}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <p className="section-note">Prices as reported by the operator to LTA.</p>
+          <p className="section-note">
+            Prices as reported by the operator to LTA. Check the operator’s app for the live price before you charge.
+          </p>
+          {tariff?.priceCaveat && <div className="fee-box price-caveat">{tariff.priceCaveat}</div>}
         </section>
 
         <section className="section">

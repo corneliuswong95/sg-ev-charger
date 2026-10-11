@@ -32,6 +32,11 @@ export interface Source {
 export interface OperatorTariff {
   /** Compact label for list rows, shown when a time-based fee applies. */
   tag?: string;
+  /**
+   * Shown with a station's prices when the operator sets live prices per site
+   * in its own app, so the figure it reported to LTA may be out of date.
+   */
+  priceCaveat?: string;
   fees: Fee[];
   notes?: string[];
   sources: Source[];
@@ -160,6 +165,8 @@ export const TARIFFS: Record<string, OperatorTariff> = {
   },
 
   volt: {
+    priceCaveat:
+      'Volt sets prices per charger and location in the Volt app, so the price listed with LTA may be out of date. Volt’s standard pay-as-you-go rates are $0.670 per kWh for AC and $0.752 per kWh for DC at commercial sites, and $0.698 (AC) and $0.752 (DC) at residential sites (Oct 2026).',
     fees: [
       {
         title: 'Volt Card bundle',
@@ -169,17 +176,19 @@ export const TARIFFS: Record<string, OperatorTariff> = {
       },
     ],
     notes: [
-      'Volt publishes pay-as-you-go rates of $0.66 per kWh for AC and $0.74 per kWh for DC (Mar 2026). The station prices shown here come from LTA and vary by site.',
+      'Prices include GST. The station prices shown here come from LTA and vary by site.',
       'No minimum fee. Parking is charged separately by the premises.',
     ],
     sources: [
-      { label: 'Keppel Volt: Volt Card (updated Mar 2026)', url: 'https://www.keppelvolt.com/drivers/promotions--partnerships/ev-charging-made-easier-with-the-volt-card/' },
+      { label: 'Keppel Volt: Volt Card and standard rates (updated Oct 2026)', url: 'https://www.keppelvolt.com/drivers/promotions--partnerships/ev-charging-made-easier-with-the-volt-card/' },
       { label: 'Keppel Volt: driver FAQ', url: 'https://www.keppelvolt.com/faq/drivers/' },
     ],
   },
 
   tesla: {
     tag: 'Congestion fee',
+    priceCaveat:
+      'Tesla sets Supercharger prices per site and by time of day in the Tesla app, so the price listed with LTA may be out of date. Only selected Superchargers accept non-Tesla EVs, and their drivers may pay more.',
     fees: [
       {
         title: 'Congestion fee',
@@ -197,6 +206,7 @@ export const TARIFFS: Record<string, OperatorTariff> = {
     ],
     sources: [
       { label: 'Tesla Singapore: Supercharger fees (archived 12 May 2026)', url: 'https://web.archive.org/web/20260512045935/https://www.tesla.com/en_sg/support/charging/supercharger/fees' },
+      { label: 'Motorist EV charging price index (14 Sep 2026)', url: 'https://www.motorist.sg/article/6317/2026-singapore-ev-charging-rates-how-much-does-it-cost' },
     ],
   },
 
