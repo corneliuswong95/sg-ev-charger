@@ -16,11 +16,18 @@ export interface Connector {
   free: boolean;
 }
 
+/** Where a station's parking info comes from. */
+export type ParkingKind = 'hdb' | 'ura' | 'jtc' | 'mall';
+
 export interface CarParkRef {
-  /** HDB car park number, e.g. "SE53". */
+  kind: ParkingKind;
+  /**
+   * HDB car park number ("SE53"), URA ppCode ("A0004"), curated id
+   * ("jtc-medtech-hub"), OneMotoring id ("om-1-ion-orchard") or LTA id ("lta-12").
+   */
   code: string;
-  /** Inside HDB's Central Area, where daytime rates are higher. */
-  central: boolean;
+  /** Inside HDB's Central Area, where daytime rates are higher (HDB only). */
+  central?: boolean;
 }
 
 export interface Charger {
@@ -65,8 +72,22 @@ export interface HdbCarPark {
   central: boolean;
 }
 
-export interface CarParkResponse {
-  carPark: HdbCarPark;
-  /** Live free car lots from LTA, `null` if this car park doesn't report. */
+export interface RateLine {
+  label: string;
+  value: string;
+}
+
+/** Ready-to-render parking block for the detail sheet, whatever the source. */
+export interface ParkingDetails {
+  kind: ParkingKind;
+  title: string;
+  subtitle: string | null;
+  /** Empty when rates aren't known for this car park. */
+  lines: RateLine[];
+  /** Live free car lots from LTA, `null` if not reported. */
   lotsAvailable: number | null;
+  notes: string[];
+  /** Where to see the rates when we can only link to them. */
+  link?: { label: string; url: string };
+  sources: { label: string; url: string }[];
 }

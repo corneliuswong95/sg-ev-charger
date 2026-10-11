@@ -125,16 +125,29 @@ export async function fetchEvBatch(): Promise<EvBatch> {
 
 interface RawCarParkLot {
   CarParkID?: string;
+  Area?: string;
+  Development?: string;
+  Location?: string;
   AvailableLots?: number;
   LotType?: string;
   Agency?: string;
 }
 
-/** Live free car lots for HDB car parks, keyed by HDB car park number. */
-export async function fetchHdbLots(): Promise<Map<string, number>> {
+export interface CarParkLots {
+  /** "HDB", "URA" or "LTA" (LTA lists major malls and attractions). */
+  agency: string;
+  id: string;
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  lots: number;
+}
+
+/** Live free car lots for every car park LTA reports (HDB, URA, major malls). */
+export async function fetchCarParkLots(): Promise<CarParkLots[]> {
   const key = accountKey();
-  const lots = new Map<string, number>();
-  // DataMall pages at 500 records; ~2,500 car parks today. Cap the loop so a
+  const out: CarParkLots[] = [];
+  // DataMall pages at 500 records; ~2,600 car parks today. Cap the loop so a
   // misbehaving API can't spin forever.
   for (let skip = 0; skip < 10_000; skip += 500) {
     const res = await fetch(`${CARPARK_URL}?$skip=${skip}`, {
@@ -144,11 +157,18 @@ export async function fetchHdbLots(): Promise<Map<string, number>> {
     if (!res.ok) throw new Error(`LTA CarParkAvailability ${res.status}`);
     const page = ((await res.json()) as { value?: RawCarParkLot[] }).value ?? [];
     for (const r of page) {
-      if (r.Agency === 'HDB' && r.LotType === 'C' && r.CarParkID && typeof r.AvailableLots === 'number') {
-        lots.set(r.CarParkID, r.AvailableLots);
-      }
+      if (r.LotType !== 'C' || !r.CarParkID || !r.Agency || typeof r.AvailableLots !== 'number') continue;
+      const [lat, lng] = (r.Location ?? '').trim().split(/\s+/).map(Number);
+      out.push({
+        agency: r.Agency,
+        id: r.CarParkID,
+        name: (r.Development ?? '').trim(),
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        lots: r.AvailableLots,
+      });
     }
     if (page.length < 500) break;
   }
-  return lots;
+  return out;
 }

@@ -1145,6 +1145,19 @@ a {
   color: var(--ink-2);
 }
 
+.rates-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--sign-soft);
+  color: var(--sign);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .skeleton {
   height: 14px;
   border-radius: 6px;

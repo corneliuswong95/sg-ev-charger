@@ -245,7 +245,7 @@ function SheetBody({
           {copied ? <CheckIcon size={20} /> : <CopyIcon size={20} />}
         </button>
       </div>
-      <p className="data-credit">Charger data from LTA DataMall. Parking data from HDB via data.gov.sg.</p>
+      <p className="data-credit">Charger data from LTA DataMall. Parking data from HDB, URA and JTC (data.gov.sg), LTA, and car park owners’ websites.</p>
     </>
   );
 }

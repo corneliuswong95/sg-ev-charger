@@ -39,6 +39,7 @@ export interface OperatorTariff {
 
 const PETROL = /^(SPC|SHELL|CALTEX|ESSO|SINOPEC)\b|FILLING STATION|PETROL STATION/i;
 const isPetrol = (c: Charger) => PETROL.test(c.name);
+const isHdb = (c: Charger) => c.carPark?.kind === 'hdb';
 
 export const TARIFFS: Record<string, OperatorTariff> = {
   sp: {
@@ -52,7 +53,7 @@ export const TARIFFS: Record<string, OperatorTariff> = {
         appliesAt: c =>
           isPetrol(c)
             ? { applies: 'yes', why: 'Applies here all day (petrol station).' }
-            : c.carPark
+            : isHdb(c)
               ? { applies: 'yes', why: 'Applies here (HDB car park).' }
               : { applies: 'maybe', why: 'Applies at selected sites. The SP app shows which.' },
       },
@@ -82,7 +83,7 @@ export const TARIFFS: Record<string, OperatorTariff> = {
           '$0.50 per minute, billed in 5-minute blocks, after a 30-minute grace period. Charged 10am to 10pm daily. Capped at $20 per session.',
         timeBased: true,
         appliesAt: c =>
-          c.carPark
+          isHdb(c)
             ? { applies: 'yes', why: 'Applies here (HDB car park).' }
             : { applies: 'maybe', why: 'Applies at selected sites. The ChargEco app shows which.' },
       },
@@ -134,7 +135,7 @@ export const TARIFFS: Record<string, OperatorTariff> = {
           '$0.50 per minute once charging ends, rounded up to the minute. Grace period is 15 minutes at Shell stations and 30 minutes elsewhere. Charged 24 hours a day. Capped at $40 per session.',
         timeBased: true,
         appliesAt: c =>
-          c.carPark
+          isHdb(c)
             ? { applies: 'no', why: 'Not charged at HDB car parks.' }
             : isPetrol(c)
               ? { applies: 'yes', why: 'Applies here, with a 15-minute grace period (Shell station).' }

@@ -1,4 +1,4 @@
-import type { HdbCarPark } from './types';
+import type { HdbCarPark, RateLine } from './types';
 
 // HDB short-term parking charges for cars. Source:
 // https://www.hdb.gov.sg/car-parks/shortterm-parking/short-term-parking-charges
@@ -10,16 +10,6 @@ export const HDB_CENTRAL_CODES = new Set([
   'ACB', 'BBB', 'BRB1', 'CY', 'DUXM', 'HLM', 'KAB', 'KAM',
   'KAS', 'PRM', 'SLS', 'SR1', 'SR2', 'TPM', 'UCS', 'WCB',
 ]);
-
-/** One-line rate shown in lists. */
-export function hdbRateShort(central: boolean): string {
-  return central ? 'HDB parking from $0.60 / 30 min' : 'HDB parking $0.60 / 30 min';
-}
-
-export interface RateLine {
-  label: string;
-  value: string;
-}
 
 function freeParkingText(raw: string): string {
   const s = raw.toUpperCase();
@@ -63,4 +53,66 @@ export function paymentText(system: string): string {
   return /COUPON/i.test(system)
     ? 'Parking.sg app or coupons'
     : 'Electronic gantry';
+}
+
+// ─── URA public car parks ───
+
+// "URA/HDB car parks that charge either $0.60 or $1.20 per half-hour" — URA, updated 20 Aug 2026.
+export const URA_COUPONS_SOURCE = 'https://www.ura.gov.sg/car-parks/short-term-parking/parking-coupons/';
+
+interface Band {
+  start: string;
+  end: string;
+  weekday: { rate: string; per: string };
+  saturday: { rate: string; per: string };
+  sundayPH: { rate: string; per: string };
+}
+
+/** "08.30 AM" → "8.30am", "12.00 PM" → "12pm" */
+function uraTime(t: string): string {
+  const m = t.match(/^(\d{1,2})\.(\d{2})\s*([AP]M)$/i);
+  if (!m) return t.toLowerCase();
+  const h = String(Number(m[1]));
+  return `${h}${m[2] === '00' ? '' : `.${m[2]}`}${m[3].toLowerCase()}`;
+}
+
+/** ("$0.50", "30 mins") → "$0.50 per 30 min"; "$0.00" → "Free" */
+function uraRate({ rate, per }: { rate: string; per: string }): string {
+  if (!rate || rate === '-') return 'No parking';
+  const n = Number(rate.replace(/[^0-9.]/g, ''));
+  if (Number.isFinite(n) && n === 0) return 'Free';
+  const unit = per.replace(/\s*mins?\b/i, ' min').replace(/\s*hrs?\b/i, ' hr').replace(/\s+/g, ' ').trim();
+  return unit ? `${rate} per ${unit}` : rate;
+}
+
+export function uraRateLines(bands: Band[]): RateLine[] {
+  const lines: RateLine[] = [];
+  const sorted = [...bands].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+  for (const b of sorted) {
+    const hours = `${uraTime(b.start)} to ${uraTime(b.end)}`;
+    const wk = uraRate(b.weekday);
+    const sat = uraRate(b.saturday);
+    const sun = uraRate(b.sundayPH);
+    if (wk === sat && sat === sun) {
+      lines.push({ label: `Daily, ${hours}`, value: wk });
+    } else if (wk === sat) {
+      lines.push({ label: `Mon–Sat, ${hours}`, value: wk });
+      lines.push({ label: `Sun and PH, ${hours}`, value: sun });
+    } else if (sat === sun) {
+      lines.push({ label: `Mon–Fri, ${hours}`, value: wk });
+      lines.push({ label: `Sat, Sun and PH, ${hours}`, value: sat });
+    } else {
+      lines.push({ label: `Mon–Fri, ${hours}`, value: wk });
+      lines.push({ label: `Sat, ${hours}`, value: sat });
+      lines.push({ label: `Sun and PH, ${hours}`, value: sun });
+    }
+  }
+  return lines;
+}
+
+function toMinutes(t: string): number {
+  const m = t.match(/^(\d{1,2})\.(\d{2})\s*([AP]M)$/i);
+  if (!m) return 0;
+  const h = Number(m[1]) % 12 + (m[3].toUpperCase() === 'PM' ? 12 : 0);
+  return h * 60 + Number(m[2]);
 }

@@ -1,8 +1,8 @@
 import type { Charger, Connector, Current, HdbCarPark } from '@/lib/types';
+import type { ParkingMatcher } from './carparks';
 import { formatAddress, titleCase } from '@/lib/format';
 import type { RawChargingPoint, RawPlug, RawStation } from './lta';
 
-type CarParkMatcher = (lat: number, lng: number, address: string, name: string) => HdbCarPark | null;
 
 function toNumber(v: unknown): number | null {
   if (v == null || v === '') return null;
@@ -74,7 +74,7 @@ function stableName(s: RawStation, cps: RawChargingPoint[]): string {
   return best?.[0] ?? s.name ?? '';
 }
 
-export function normalizeStations(stations: RawStation[], matchCarPark: CarParkMatcher | null): Charger[] {
+export function normalizeStations(stations: RawStation[], matchCarPark: ParkingMatcher | null): Charger[] {
   const out: Charger[] = [];
   const seenIds = new Map<string, number>();
 
@@ -101,7 +101,12 @@ export function normalizeStations(stations: RawStation[], matchCarPark: CarParkM
       const lat = lat0;
       const lng = lng0 + gi * 0.00007;
       const rawName = stableName(s, cps);
-      const hdb = matchCarPark ? matchCarPark(lat0, lng0, rawAddress, rawName) : null;
+      // Try the charge point name we display, then LTA's station-level name.
+      const parking = matchCarPark
+        ? matchCarPark(lat0, lng0, rawAddress, rawName) ??
+          (s.name && s.name !== rawName ? matchCarPark(lat0, lng0, rawAddress, s.name) : null)
+        : null;
+      const hdb = parking?.hdb ?? null;
 
       const connectors = new Map<string, Connector>();
       let available = 0, occupied = 0, offline = 0, total = 0;
@@ -167,7 +172,7 @@ export function normalizeStations(stations: RawStation[], matchCarPark: CarParkM
         hasDC: [...connectors.values()].some(c => c.current === 'DC'),
         connectors: [...connectors.values()].sort((a, b) => b.kw - a.kw || (a.price ?? 99) - (b.price ?? 99)),
         minPrice,
-        carPark: hdb ? { code: hdb.code, central: hdb.central } : null,
+        carPark: parking?.ref ?? null,
       });
     });
   }
