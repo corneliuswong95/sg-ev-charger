@@ -12,6 +12,7 @@ import { BoltIcon } from '@/components/Icons';
 import type { MapHandle } from '@/components/MapView';
 import type { Charger, ChargersResponse, FilterKey } from '@/lib/types';
 import { matchesFilters, matchesOperator, matchesQuery } from '@/lib/chargers';
+import { resolveOperator } from '@/lib/operators';
 
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
@@ -35,11 +36,11 @@ function sheetOffset(): [number, number] {
 }
 
 /** Map area left visible by the top bar and sheets: [top, right, bottom, left]. */
-function visiblePadding(): [number, number, number, number] {
+function visiblePadding(listExpanded: boolean): [number, number, number, number] {
   if (isDesktop()) return [40, 60, 40, 440];
-  // Mobile: list sheet expands over most of the screen while searching, so
-  // fit into the strip under the top bar.
-  return [130, 30, Math.round(window.innerHeight * 0.62), 30];
+  // Mobile: while searching the list sheet covers most of the screen, so fit
+  // into the strip under the top bar; otherwise clear the collapsed list + tabs.
+  return [130, 30, listExpanded ? Math.round(window.innerHeight * 0.62) : 180, 30];
 }
 
 type Notice = { message: string; retry: boolean };
@@ -145,7 +146,7 @@ export default function Home() {
   useEffect(() => {
     if (!query.trim() || filtered.length === 0 || filtered.length > 400) return;
     const t = setTimeout(() => {
-      mapRef.current?.fitBounds(filtered.map(c => [c.lat, c.lng]), visiblePadding());
+      mapRef.current?.fitBounds(filtered.map(c => [c.lat, c.lng]), visiblePadding(true));
     }, SEARCH_FIT_DELAY_MS);
     return () => clearTimeout(t);
     // Only re-fit when the query (or the matching set) changes, not on data refresh.
@@ -189,6 +190,20 @@ export default function Home() {
     setQuery('');
   }
 
+  /** From Prices → By operator: show that operator's stations on the map. */
+  function showOperator(key: string) {
+    setQuery('');
+    setFilters([]);
+    setOperator(key);
+    setSelectedId(null);
+    setListExpanded(false);
+    setTab('map');
+    const points = chargers
+      .filter(c => matchesOperator(c, key))
+      .map(c => [c.lat, c.lng] as [number, number]);
+    requestAnimationFrame(() => mapRef.current?.fitBounds(points, visiblePadding(false)));
+  }
+
   function changeTab(t: Tab) {
     setTab(t);
     if (t === 'prices') setPricesVisited(true);
@@ -220,6 +235,12 @@ export default function Home() {
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
+
+  const operatorLabel = useMemo(() => {
+    if (!operator) return null;
+    const c = chargers.find(x => matchesOperator(x, operator));
+    return c ? resolveOperator(c.operator).label : null;
+  }, [chargers, operator]);
 
   const origin = userPos ?? mapCenter;
   const hasFilters = filters.length > 0 || operator != null;
@@ -277,6 +298,7 @@ export default function Home() {
           hasFilters={hasFilters}
           onClearFilters={clearFilters}
           onClearSearch={() => setQuery('')}
+          operatorLabel={operatorLabel}
         />
       </div>
 
@@ -289,6 +311,7 @@ export default function Home() {
             locationDenied={locationDenied}
             onRequestLocation={() => locateUser(false)}
             onOpenStation={handleSelect}
+            onShowOperator={showOperator}
           />
         </div>
       )}

@@ -20,6 +20,8 @@ interface Props {
   hasFilters: boolean;
   onClearFilters: () => void;
   onClearSearch: () => void;
+  /** Operator the list is filtered to, for the title. */
+  operatorLabel: string | null;
 }
 
 const PAGE = 40;
@@ -27,7 +29,7 @@ const DRAG_THRESHOLD = 50;
 
 export default function StationListSheet({
   chargers, origin, originIsUser, query, updatedAt, selectedId, onSelect,
-  expanded, onExpandedChange, hasFilters, onClearFilters, onClearSearch,
+  expanded, onExpandedChange, hasFilters, onClearFilters, onClearSearch, operatorLabel,
 }: Props) {
   const [limit, setLimit] = useState(PAGE);
   const [drag, setDrag] = useState(0);
@@ -74,7 +76,7 @@ export default function StationListSheet({
   const time = formatTime(updatedAt);
   const title = query.trim()
     ? rows.length === 0 ? 'No matches' : `${rows.length.toLocaleString()} match${rows.length === 1 ? '' : 'es'}`
-    : originIsUser ? 'Chargers near you' : 'Chargers near map centre';
+    : `${operatorLabel ? `${operatorLabel} chargers` : 'Chargers'} near ${originIsUser ? 'you' : 'map centre'}`;
   const sub = query.trim()
     ? `For “${query.trim()}”${origin && rows.length > 0 ? ', closest first' : ''}`
     : `${rows.length.toLocaleString()} stations${time ? `, live as of ${time}` : ''}`;

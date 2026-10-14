@@ -82,7 +82,11 @@ Clustering uses `react-leaflet-cluster@2` — v4 requires React 19 / react-leafl
 
 ### Prices tab (`components/PricesView.tsx`)
 
-Ranks stations by their cheapest listed $/kWh for the chosen current (AC/DC). Stations listed as free are shown separately, stations with no price are counted but not ranked, and "typical" is the median. "By operator" uses each operator's median price and range. Time-based fee tags come from `timeFeeTag()` in [lib/tariffs.ts](lib/tariffs.ts): yellow when a fee definitely applies, outlined when it may.
+Ranks stations by their cheapest listed $/kWh for the chosen current (AC/DC). Stations listed as free are shown separately, stations with no price are counted but not ranked, and "typical" is the median. "By operator" uses each operator's median price and range. Time-based fee tags come from `timeFeeTag()` in [lib/tariffs.ts](lib/tariffs.ts): yellow when a fee definitely applies, outlined when it may. Each expanded operator row has "Show … on the map", which calls `showOperator()` in `app/page.tsx` (clears search and filters, sets the operator filter, fits the map to that operator's stations).
+
+### Detail sheet (`components/ChargerSheet.tsx`)
+
+The full header scrolls with the content; once it has scrolled away, a slim sticky bar (`.detail-mini`: name, status, close) fades in. It's an overlay with zero layout height, so toggling it never shifts the content — don't turn it back into a shrinking sticky header.
 
 ### Derived charger logic is centralized
 

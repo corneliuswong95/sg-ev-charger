@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Charger } from '@/lib/types';
-import { getStatus, STATUS_LABEL } from '@/lib/chargers';
+import { availabilityShort, getStatus, STATUS_LABEL } from '@/lib/chargers';
 import { companyName, resolveOperator } from '@/lib/operators';
 import { formatKw, formatPrice, formatTime } from '@/lib/format';
 import { feeApplies, tariffFor, TARIFFS_CHECKED } from '@/lib/tariffs';
@@ -28,6 +28,10 @@ export default function ChargerSheet({ charger, updatedAt, onClose }: Props) {
   const open = !!charger;
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const headRef = useRef<HTMLDivElement | null>(null);
+  // Once the full header has scrolled away, a slim bar keeps the name and
+  // close button in view (matters most on small phones).
+  const [compact, setCompact] = useState(false);
   // Keep the last station rendered while the sheet slides away.
   const [shown, setShown] = useState<Charger | null>(charger);
   useEffect(() => {
@@ -46,7 +50,13 @@ export default function ChargerSheet({ charger, updatedAt, onClose }: Props) {
   // New station → start at the top.
   useEffect(() => {
     sheetRef.current?.scrollTo({ top: 0 });
+    setCompact(false);
   }, [charger?.id]);
+
+  function onScroll(e: React.UIEvent<HTMLDivElement>) {
+    const headHeight = headRef.current?.offsetHeight ?? 140;
+    setCompact(e.currentTarget.scrollTop > headHeight - 24);
+  }
 
   return (
     <>
@@ -58,9 +68,17 @@ export default function ChargerSheet({ charger, updatedAt, onClose }: Props) {
         aria-modal="false"
         aria-label={body?.name ?? 'Charger details'}
         aria-hidden={!open}
+        onScroll={onScroll}
       >
         {body && (
-          <SheetBody charger={body} updatedAt={updatedAt} onClose={onClose} closeRef={closeRef} />
+          <SheetBody
+            charger={body}
+            updatedAt={updatedAt}
+            onClose={onClose}
+            closeRef={closeRef}
+            headRef={headRef}
+            compact={compact}
+          />
         )}
       </div>
     </>
@@ -91,12 +109,14 @@ function BayBar({ c }: { c: Charger }) {
 }
 
 function SheetBody({
-  charger: c, updatedAt, onClose, closeRef,
+  charger: c, updatedAt, onClose, closeRef, headRef, compact,
 }: {
   charger: Charger;
   updatedAt: string | null;
   onClose: () => void;
   closeRef: React.RefObject<HTMLButtonElement>;
+  headRef: React.RefObject<HTMLDivElement>;
+  compact: boolean;
 }) {
   const status = getStatus(c);
   const op = resolveOperator(c.operator);
@@ -124,7 +144,16 @@ function SheetBody({
 
   return (
     <>
-      <div className="detail-head">
+      <div className={`detail-mini${compact ? ' show' : ''}`} aria-hidden={!compact}>
+        <div className="detail-mini-bar">
+          <span className="detail-mini-name">{c.name}</span>
+          <span className={`status-pill ${status}`}>{availabilityShort(c)}</span>
+          <button className="detail-close" onClick={onClose} aria-label="Close" tabIndex={compact ? 0 : -1}>
+            <CloseIcon size={18} />
+          </button>
+        </div>
+      </div>
+      <div className="detail-head" ref={headRef}>
         <button ref={closeRef} className="detail-close" onClick={onClose} aria-label="Close">
           <CloseIcon size={18} />
         </button>

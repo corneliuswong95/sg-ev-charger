@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import type { Charger, FilterKey } from '@/lib/types';
 import OperatorFilter from './OperatorFilter';
 import { BoltIcon, CloseIcon, RefreshIcon } from './Icons';
@@ -27,6 +28,17 @@ export default function TopBar({
   query, onQueryChange, filters, onToggleFilter,
   operatorSource, operator, onOperatorChange, refreshing, onRefresh,
 }: Props) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  // The operator chip sits at the end of a scrolling row; bring it into view
+  // when an operator is picked elsewhere (e.g. Prices → "Show on the map").
+  useEffect(() => {
+    const row = rowRef.current;
+    const chip = row?.querySelector<HTMLElement>('.op-filter');
+    if (!row || !chip || !operator) return;
+    row.scrollTo({ left: chip.offsetLeft - 12, behavior: 'smooth' });
+  }, [operator]);
+
   return (
     <header className="topbar">
       <div className="searchbar" role="search">
@@ -60,7 +72,7 @@ export default function TopBar({
         )}
       </div>
 
-      <div className="filter-row">
+      <div className="filter-row" ref={rowRef}>
         {FILTERS.map(f => (
           <button
             key={f.key}

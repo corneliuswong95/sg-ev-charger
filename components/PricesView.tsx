@@ -17,6 +17,8 @@ interface Props {
   locationDenied: boolean;
   onRequestLocation: () => void;
   onOpenStation: (c: Charger) => void;
+  /** Show all of one operator's stations on the map. */
+  onShowOperator: (operatorKey: string) => void;
 }
 
 type View = 'stations' | 'operators';
@@ -39,7 +41,7 @@ function median(xs: number[]): number | null {
 }
 
 export default function PricesView({
-  chargers, updatedAt, userPos, locationDenied, onRequestLocation, onOpenStation,
+  chargers, updatedAt, userPos, locationDenied, onRequestLocation, onOpenStation, onShowOperator,
 }: Props) {
   const [current, setCurrent] = useState<Current>('AC');
   const [view, setView] = useState<View>('stations');
@@ -218,7 +220,7 @@ export default function PricesView({
             </p>
           </>
         ) : (
-          <OperatorTable rows={operators} kind={kind} />
+          <OperatorTable rows={operators} kind={kind} onShow={onShowOperator} />
         )}
       </div>
     </main>
@@ -270,7 +272,7 @@ interface OpRow {
   max: number | null;
 }
 
-function OperatorTable({ rows, kind }: { rows: OpRow[]; kind: string }) {
+function OperatorTable({ rows, kind, onShow }: { rows: OpRow[]; kind: string; onShow: (key: string) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <>
@@ -360,6 +362,9 @@ function OperatorTable({ rows, kind }: { rows: OpRow[]; kind: string }) {
                       ))}
                     </p>
                   )}
+                  <button className="op-show" onClick={() => onShow(r.key)}>
+                    Show {r.label} on the map
+                  </button>
                 </div>
               )}
             </div>
