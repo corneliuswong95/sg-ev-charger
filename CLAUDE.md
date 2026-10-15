@@ -13,7 +13,7 @@ Requires Node ≥ 18. Environment variables (see `.env.example`), all server-sid
 
 - `LTA_ACCOUNT_KEY` — **required**; used by [lib/server/lta.ts](lib/server/lta.ts).
 - `URA_ACCESS_KEY` — optional; turns on URA car park rates in [lib/server/ura.ts](lib/server/ura.ts).
-- `ONEMOTORING_INLINE=1` — optional; shows LTA OneMotoring rate text inline. Leave unset until LTA has given written permission (see below).
+- `ONEMOTORING_INLINE=0` — optional kill switch; goes back to linking to OneMotoring instead of showing its rates (see below).
 
 Anything under `lib/server/` must only be imported from route handlers.
 
@@ -30,7 +30,7 @@ Next.js 14 App Router, TypeScript strict mode, no global state library. Path ali
 | LTA DataMall `CarParkAvailabilityv2` | Live free car lots (HDB, URA, ~40 major malls) and URA/mall car park locations | [lib/server/lta.ts](lib/server/lta.ts) | 2 min |
 | URA Data Service `Car_Park_Details` | URA public car park rates by time band (**optional**: only if `URA_ACCESS_KEY` is set) | [lib/server/ura.ts](lib/server/ura.ts) | 24 h |
 | data.gov.sg "Capacity of URA Parking Places" | URA car park locations + capacity without a key | [lib/server/ura.ts](lib/server/ura.ts) | 24 h |
-| LTA OneMotoring "Parking Rates" (7 HTML pages) | ~420 mall/office/hotel car parks, matched by name. **Link-only by default** — its ToU forbids reproduction without LTA's written permission; `ONEMOTORING_INLINE=1` shows the text | [lib/server/onemotoring.ts](lib/server/onemotoring.ts) | 24 h |
+| LTA OneMotoring "Parking Rates" (7 HTML pages) | ~420 mall/office/hotel car parks, matched by name. Shown inline under **LTA's written permission (Oct 2026, 12 months, renewable)** — keep to its terms: only the charger's own car park, text as published, credit "LTA OneMotoring" + updated date + link + GST note, fetch at most daily. `ONEMOTORING_INLINE=0` reverts to link-only | [lib/server/onemotoring.ts](lib/server/onemotoring.ts) | 24 h |
 | JTC public car park price list (PDF) | Rates for 17 JTC car parks with chargers, hand-curated | [lib/curatedParking.ts](lib/curatedParking.ts) | — |
 | Car park owners' own websites | Rates for 67 malls, hospitals and attractions, hand-curated | [lib/curatedMalls.ts](lib/curatedMalls.ts) | — |
 | OneMap (SLA) Grey tiles | Base map (CARTO now needs an API key) | [components/MapView.tsx](components/MapView.tsx) | — |

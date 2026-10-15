@@ -9,7 +9,7 @@ A mobile-first web app showing real-time EV charger availability across Singapor
 - **Station details** — per-connector type, power, live status and price per kWh
 - **Prices tab** — every charger ranked cheapest first (AC or DC), plus an operator comparison
 - **Extra charges** — idle fees and other time-based charges from each operator's published terms, with sources, and whether they apply at that station
-- **Parking** — rates and live free lots for ~2,100 stations: HDB car parks (official rates, caps, free Sunday/PH parking), JTC industrial car parks, URA car parks, and ~65 malls, hospitals and attractions (from the owners' own websites). Other malls and offices link to LTA OneMotoring's rate list.
+- **Parking** — rates and live free lots for ~2,100 stations: HDB car parks (official rates, caps, free Sunday/PH parking), JTC industrial car parks, URA car parks, and ~65 malls, hospitals and attractions (from the owners' own websites). Other malls, offices and hotels show LTA OneMotoring's published rates (used with LTA's permission).
 - Get directions (Apple Maps on iOS, Google Maps elsewhere)
 
 ## Tech stack
@@ -18,7 +18,7 @@ A mobile-first web app showing real-time EV charger availability across Singapor
 - **react-leaflet** + CartoDB dark tiles
 - **LTA DataMall** EVCBatch and CarParkAvailabilityv2 (server-side proxied)
 - **data.gov.sg** HDB Carpark Information and URA Parking Places
-- **LTA OneMotoring** parking rates (linked), **URA Data Service** (optional key), JTC and mall owners' published rates
+- **LTA OneMotoring** parking rates (with LTA's permission), **URA Data Service** (optional key), JTC and mall owners' published rates
 
 ## Setup
 

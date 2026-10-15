@@ -3,10 +3,14 @@
 // attractions, as free text, by name only (no coordinates).
 //
 // Licence: OneMotoring's terms of use (clause 6) don't allow reproducing its
-// contents without LTA's written permission. By default we only use it to
-// find which car park a station is in and link to LTA's page. Set
-// ONEMOTORING_INLINE=1 to show the rate text in the app once LTA has given
-// permission.
+// contents without LTA's written permission. LTA agreed in Oct 2026 to the
+// app showing these rates for 12 months (renewable), on the terms we asked
+// for: only the car park a charger is in, rate text as published, credited
+// "LTA OneMotoring" with its last-updated date, a link back and LTA's GST
+// note, fetched at most daily. Keep to those terms.
+//
+// Set ONEMOTORING_INLINE=0 to go back to link-only (e.g. if permission
+// lapses or is withdrawn).
 
 const BASE = 'https://onemotoring.lta.gov.sg/content/onemotoring/home/owning/ongoing-car-costs/parking';
 const AREAS: Record<string, string> = {
@@ -37,7 +41,7 @@ export interface OmIndex {
   match: (rawName: string, rawAddress: string) => OmCarPark | null;
 }
 
-export const omInline = () => process.env.ONEMOTORING_INLINE === '1';
+export const omInline = () => process.env.ONEMOTORING_INLINE !== '0';
 
 const decode = (s: string) =>
   s

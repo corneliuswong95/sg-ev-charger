@@ -156,10 +156,16 @@ function omDetails(cp: OmCarPark, s: ParkingSources): ParkingDetails {
     lines: inline ? omLines(cp) : [],
     lotsAvailable: mallLots(s.lots, cp.name),
     notes: inline
-      ? ['LTA notes these rates may not include GST, and car parks may change them without notice.']
+      ? [
+          'LTA notes these rates may not include GST, and car parks may change them without notice.',
+          'Parking is paid separately from charging.',
+        ]
       : [`LTA publishes this car park’s rates on OneMotoring${updated ? ` (updated ${updated})` : ''}. Parking is paid separately from charging.`],
     link: inline ? undefined : { label: 'View rates on OneMotoring', url: cp.url },
-    sources: inline ? [{ label: 'LTA OneMotoring parking rates', url: cp.url }] : [],
+    // Attribution LTA agreed to: name, last-updated date, link back.
+    sources: inline
+      ? [{ label: `LTA OneMotoring${updated ? `, updated ${updated}` : ''}`, url: cp.url }]
+      : [],
   };
 }
 
