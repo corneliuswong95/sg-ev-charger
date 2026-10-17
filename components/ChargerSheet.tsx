@@ -9,6 +9,7 @@ import { feeApplies, tariffFor, TARIFFS_CHECKED } from '@/lib/tariffs';
 import OperatorIcon from './OperatorIcon';
 import CarParkInfo from './CarParkInfo';
 import PopularTimes from './PopularTimes';
+import StationHistory from './StationHistory';
 import { CheckIcon, CloseIcon, CopyIcon, NavigateIcon } from './Icons';
 
 interface Props {
@@ -229,6 +230,7 @@ function SheetBody({
         </section>
 
         <PopularTimes charger={c} />
+        <StationHistory charger={c} />
 
         <section className="section">
           <h3 className="section-title">Extra charges</h3>

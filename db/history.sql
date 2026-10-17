@@ -273,6 +273,42 @@ as $$
   );
 $$;
 
+-- One station's history for its detail sheet: the last p_days Singapore days
+-- from station_days, and listed-price changes for its plugs (identical
+-- changes on several plugs grouped into one row, newest first).
+create or replace function public.station_history(p_station_id text, p_days integer default 28)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'since', (select min(taken_at) from public.snapshots),
+    -- [day, snapshots, with a live status, full]
+    'days', coalesce((
+      select jsonb_agg(jsonb_build_array(day, samples, reporting, full_count) order by day)
+      from public.station_days
+      where station_id = p_station_id
+        and day > (now() at time zone 'Asia/Singapore')::date - p_days
+    ), '[]'::jsonb),
+    -- [day, 'AC' | 'DC', plug type, kW, old price, new price, plugs]
+    'prices', coalesce((
+      select jsonb_agg(jsonb_build_array(day, current_type, plug_type, kw, old_price, new_price, plugs)
+                       order by day desc, current_type, kw desc)
+      from (
+        select pc.day, pl.current_type, pl.plug_type, pl.kw, pc.old_price, pc.new_price, count(*)::integer as plugs
+        from public.price_changes as pc
+        join public.plugs as pl on pl.ev_cp_id = pc.ev_cp_id
+        where pl.station_id = p_station_id
+        group by pc.day, pl.current_type, pl.plug_type, pl.kw, pc.old_price, pc.new_price
+      ) as c
+    ), '[]'::jsonb)
+  );
+$$;
+
+revoke execute on function public.station_history(text, integer) from public, anon, authenticated;
+grant execute on function public.station_history(text, integer) to service_role;
+
 revoke execute on function public.history_trends(integer, jsonb) from public, anon, authenticated;
 grant execute on function public.history_trends(integer, jsonb) to service_role;
 

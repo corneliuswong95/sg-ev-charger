@@ -1,4 +1,4 @@
-import type { HistoryTrends, PopularTimes } from '@/lib/types';
+import type { HistoryTrends, PopularTimes, StationHistory } from '@/lib/types';
 import { SG_PUBLIC_HOLIDAYS } from '@/lib/holidays';
 import { rpc, select } from './supabase';
 
@@ -10,6 +10,10 @@ export function historyConfigured(): boolean {
 
 export function fetchTrends(district: number | null): Promise<HistoryTrends> {
   return rpc<HistoryTrends>('history_trends', { p_district: district, p_holidays: SG_PUBLIC_HOLIDAYS });
+}
+
+export function fetchStationHistory(stationId: string): Promise<StationHistory> {
+  return rpc<StationHistory>('station_history', { p_station_id: stationId });
 }
 
 const SLOTS = 168;

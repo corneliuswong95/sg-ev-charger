@@ -109,6 +109,16 @@ export interface PopularTimes {
   full: number[];
 }
 
+/** /api/history/station/[id] — one station's recent days and price changes. */
+export interface StationHistory {
+  /** When history collection began (ISO). */
+  since: string | null;
+  /** Last 28 Singapore days, oldest first: [YYYY-MM-DD, snapshots, with a live status, full]. */
+  days: [string, number, number, number][];
+  /** Newest first: [YYYY-MM-DD, 'AC' | 'DC', plug type, kW, old $/kWh, new $/kWh, plugs]. */
+  prices: [string, string, string, number, number | null, number | null, number][];
+}
+
 export interface RateLine {
   label: string;
   value: string;

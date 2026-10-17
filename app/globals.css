@@ -2376,6 +2376,99 @@ button.bar-row:hover {
   color: var(--ink);
 }
 
+/* Station history: 28 day bars (newest right) and a price-change list. */
+.day-bars {
+  display: grid;
+  grid-template-columns: repeat(28, minmax(0, 1fr));
+  gap: 2px;
+  align-items: end;
+  height: 56px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--line-strong);
+  touch-action: pan-y;
+}
+
+.day-bar {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.day-bar i {
+  display: block;
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--sign);
+}
+
+.day-bar.active i {
+  background: var(--sign-press);
+}
+
+.day-bar.active {
+  background: var(--sign-soft);
+  border-radius: 2px 2px 0 0;
+}
+
+.day-bar.empty::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.day-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: var(--num);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.history-subtitle {
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.price-history {
+  list-style: none;
+  margin-top: 6px;
+}
+
+.price-history li {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.ph-day {
+  font-family: var(--num);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.ph-what {
+  min-width: 0;
+  color: var(--ink-2);
+}
+
+.ph-change {
+  font-family: var(--num);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
 /* ─── Loading / toast ─── */
 .loading-screen {
   position: fixed;

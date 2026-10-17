@@ -108,6 +108,12 @@ publishes it.
 | "Busier than usual" line under the live count | the same weekday and hour seen on 3 earlier days |
 | Popular times, typical day | about a day (4 snapshots per hour) |
 | Popular times, per weekday | about two weeks (8 snapshots for most of that weekday's hours) |
+| Station history: how often full each day (last 28 days) | about an hour of a day's snapshots per bar |
+| Station history: price changes | the second daily catalogue refresh |
+
+Station history comes from `station_history()` (db/history.sql) via `/api/history/station/[id]`
+([components/StationHistory.tsx](../components/StationHistory.tsx), under Popular times in the
+sheet). It's keyed by `Charger.id`, so it restarts if a station's set of plugs changes.
 
 Originally planned:
 

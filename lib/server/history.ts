@@ -2,6 +2,7 @@ import { siteKey } from '@/lib/chargers';
 import { resolveOperator } from '@/lib/operators';
 import { districtOf } from '@/lib/districts';
 import { liveStats } from '@/lib/stats';
+import { sgDate } from '@/lib/sgtime';
 import type { EvBatch } from './lta';
 import { normalizeStations } from './normalize';
 import { rpc, select } from './supabase';
@@ -66,13 +67,6 @@ function add<K>(map: Map<K, Counts>, key: K, c: Counts) {
   const t = map.get(key);
   if (t) for (let i = 0; i < 4; i++) t[i] += c[i];
   else map.set(key, [...c]);
-}
-
-/** Singapore calendar date, YYYY-MM-DD. */
-export function sgDate(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(d);
 }
 
 export function buildPayload(batch: EvBatch, now = new Date()): SnapshotPayload {

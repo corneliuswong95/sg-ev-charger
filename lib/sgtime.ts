@@ -18,6 +18,20 @@ function parts(d: Date): Record<string, string> {
   return Object.fromEntries(PARTS.formatToParts(d).map(p => [p.type, p.value]));
 }
 
+const DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+/** Singapore calendar date, YYYY-MM-DD. */
+export function sgDate(d: Date): string {
+  return DATE.format(d);
+}
+
+/** YYYY-MM-DD plus n days. */
+export function addDays(day: string, n: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
 /** Day of week (0 = Sunday) and hour, in Singapore. */
 export function sgtSlot(d: Date): { dow: number; hour: number } {
   const p = parts(d);
