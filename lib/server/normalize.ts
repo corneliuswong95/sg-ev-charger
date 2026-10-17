@@ -4,6 +4,15 @@ import { correctPrice } from '@/lib/priceCorrections';
 import { formatAddress, titleCase } from '@/lib/format';
 import type { RawChargingPoint, RawPlug, RawStation } from './lta';
 
+/** One LTA charge point (`evCpId`) as listed, for the history collector. */
+export interface PlugRecord {
+  evCpId: string;
+  plugType: string;
+  current: Current;
+  kw: number;
+  /** $/kWh exactly as LTA lists it (before lib/priceCorrections.ts); 0 if free, null if not listed. */
+  ltaPrice: number | null;
+}
 
 function toNumber(v: unknown): number | null {
   if (v == null || v === '') return null;
@@ -75,7 +84,15 @@ function stableName(s: RawStation, cps: RawChargingPoint[]): string {
   return best?.[0] ?? s.name ?? '';
 }
 
-export function normalizeStations(stations: RawStation[], matchCarPark: ParkingMatcher | null): Charger[] {
+/**
+ * `collect`, if given, receives each station with its charge points — the
+ * history collector uses it to track plugs by `evCpId`.
+ */
+export function normalizeStations(
+  stations: RawStation[],
+  matchCarPark: ParkingMatcher | null,
+  collect?: (charger: Charger, plugs: PlugRecord[]) => void,
+): Charger[] {
   const out: Charger[] = [];
   const seenIds = new Map<string, number>();
 
@@ -114,6 +131,7 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
       let maxKw = 0;
       const minPrice: Record<Current, number | null> = { AC: null, DC: null };
       const evIds: string[] = [];
+      const plugs: PlugRecord[] | null = collect ? [] : null;
 
       for (const cp of cps) {
         for (const plug of cp.plugTypes ?? []) {
@@ -125,7 +143,17 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
           const price = fix ? fix.price : parsed.price;
           const free = parsed.free;
           const counts = countConnectors(plug, cp);
-          for (const e of plug.evIds ?? []) if (e.evCpId) evIds.push(e.evCpId);
+          for (const e of plug.evIds ?? []) {
+            if (!e.evCpId) continue;
+            evIds.push(e.evCpId);
+            plugs?.push({
+              evCpId: e.evCpId,
+              plugType: plug.plugType?.trim() || 'Unknown',
+              current,
+              kw,
+              ltaPrice: parsed.price,
+            });
+          }
 
           available += counts.available;
           occupied += counts.occupied;
@@ -162,7 +190,7 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
       const n = (seenIds.get(baseId) ?? 0) + 1;
       seenIds.set(baseId, n);
 
-      out.push({
+      const charger: Charger = {
         id: n === 1 ? baseId : `${baseId}-${n}`,
         name: displayName(rawName, rawAddress, hdb),
         address: formatAddress(rawAddress),
@@ -179,7 +207,9 @@ export function normalizeStations(stations: RawStation[], matchCarPark: ParkingM
         connectors: [...connectors.values()].sort((a, b) => b.kw - a.kw || (a.price ?? 99) - (b.price ?? 99)),
         minPrice,
         carPark: parking?.ref ?? null,
-      });
+      };
+      out.push(charger);
+      if (plugs) collect?.(charger, plugs);
     });
   }
   return out;

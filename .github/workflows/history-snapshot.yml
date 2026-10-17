@@ -1,0 +1,52 @@
+# Records a history snapshot for the Stats tab every 15 minutes.
+#
+# The work happens in the app (app/api/cron/snapshot/route.ts); this job only
+# calls it. It needs the repository secret CRON_SECRET, with the same value as
+# the CRON_SECRET env var on Vercel.
+#
+# GitHub runs schedules from the default branch only, in UTC, and may start
+# them late or skip some when busy, so small gaps in the history are expected.
+
+name: History snapshot
+
+on:
+  schedule:
+    # Just after LTA's 5-minute updates, and away from the busy top of the hour.
+    - cron: '7,22,37,52 * * * *'
+    # Monthly keepalive (see the job below).
+    - cron: '30 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.event.schedule != '30 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Record snapshot
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SNAPSHOT_URL: ${{ vars.SNAPSHOT_URL || 'https://sg-ev-charger.vercel.app/api/cron/snapshot' }}
+        # Retrying is safe: the app records each LTA update only once.
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            --retry 2 --retry-delay 15 --retry-all-errors \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" "$SNAPSHOT_URL"
+
+  # GitHub turns off schedules in public repos after 60 days without repository
+  # activity (it emails first). Re-enabling the workflow each month is meant to
+  # stop that; if it's ever turned off anyway, re-enable it in the Actions tab.
+  keepalive:
+    if: github.event.schedule == '30 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/history-snapshot.yml/enable"

@@ -44,7 +44,7 @@ export async function parkingSources(): Promise<ParkingSources> {
 }
 
 /** LTA occasionally resets connections; one quick retry avoids most 502s. */
-async function fetchEvBatchWithRetry() {
+export async function fetchEvBatchWithRetry() {
   try {
     return await fetchEvBatch();
   } catch (err) {

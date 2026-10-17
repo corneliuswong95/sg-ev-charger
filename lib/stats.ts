@@ -138,7 +138,7 @@ export function snapshotStats(chargers: Charger[]): Stats {
   };
 }
 
-function liveStats(chargers: Charger[]): Live {
+export function liveStats(chargers: Charger[]): Live {
   const s: Live = { plugs: 0, free: 0, inUse: 0, noStatus: 0, kwInUse: 0, kwInstalled: 0 };
   for (const c of chargers) {
     s.plugs += c.total;

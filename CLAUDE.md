@@ -14,6 +14,7 @@ Requires Node ≥ 18. Environment variables (see `.env.example`), all server-sid
 - `LTA_ACCOUNT_KEY` — **required**; used by [lib/server/lta.ts](lib/server/lta.ts).
 - `URA_ACCESS_KEY` — optional; turns on URA car park rates in [lib/server/ura.ts](lib/server/ura.ts).
 - `ONEMOTORING_INLINE=0` — optional kill switch; goes back to linking to OneMotoring instead of showing its rates (see below).
+- `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `CRON_SECRET` — optional; the history collector (see below). The secret key bypasses Supabase's Row Level Security, so it stays in [lib/server/supabase.ts](lib/server/supabase.ts) and is never logged.
 
 Anything under `lib/server/` must only be imported from route handlers.
 
@@ -86,7 +87,11 @@ Ranks stations by their cheapest listed $/kWh for the chosen current (AC/DC). St
 
 ### Stats tab (`components/StatsView.tsx`)
 
-Fun facts from the current snapshot only: live status, a postal-district league ([lib/districts.ts](lib/districts.ts), keyed by the postcode's first two digits), records (biggest, fastest, loner, hotspot, four corners), price spread and "kopi index", fee and free-Sunday-parking shares (`CarParkRef.freeSunday`, HDB only), operator/plug-type/AC-DC/car park mix, and stats near the user. All figures come from `snapshotStats()` / `nearbyStats()` in [lib/stats.ts](lib/stats.ts); the assumptions behind conversions (`KWH_PER_100KM`, `FULL_KWH`, `KOPI_PRICE`) are exported there and stated in the UI's footnotes — keep them in sync. Bars are one colour (`--sign`) with every value labelled; the status stack keeps grey between green and red so the two never touch (colour-blind safety). There is no history yet — see [docs/history-stats.md](docs/history-stats.md) before adding time-based stats.
+Fun facts from the current snapshot only: live status, a postal-district league ([lib/districts.ts](lib/districts.ts), keyed by the postcode's first two digits), records (biggest, fastest, loner, hotspot, four corners), price spread and "kopi index", fee and free-Sunday-parking shares (`CarParkRef.freeSunday`, HDB only), operator/plug-type/AC-DC/car park mix, and stats near the user. All figures come from `snapshotStats()` / `nearbyStats()` in [lib/stats.ts](lib/stats.ts); the assumptions behind conversions (`KWH_PER_100KM`, `FULL_KWH`, `KOPI_PRICE`) are exported there and stated in the UI's footnotes — keep them in sync. Bars are one colour (`--sign`) with every value labelled; the status stack keeps grey between green and red so the two never touch (colour-blind safety).
+
+### History collector (`lib/server/history.ts`)
+
+Everything must stay on free tiers (Vercel Hobby crons only run daily), so GitHub Actions ([.github/workflows/history-snapshot.yml](.github/workflows/history-snapshot.yml)) calls `POST /api/cron/snapshot` with `Authorization: Bearer $CRON_SECRET` every 15 minutes. The route fetches `EVCBatch`, and `recordSnapshot()` writes to Supabase Postgres through two SQL functions in [db/history.sql](db/history.sql) (paste into Supabase's SQL Editor to change the schema; it's re-runnable). A snapshot is keyed by LTA's `LastUpdatedTime`, so retries and double runs are no-ops — keep writes idempotent. `station_days` buckets by Singapore date; the station/plug catalogue and `price_changes` refresh once a day, chunked, with stations written last. Plugs are tracked by `evCpId` via the `collect` hook on `normalizeStations()`; `Charger.id` changes when a station's plugs change. Read-side charts aren't built yet — see [docs/history-stats.md](docs/history-stats.md).
 
 ### Detail sheet (`components/ChargerSheet.tsx`)
 
