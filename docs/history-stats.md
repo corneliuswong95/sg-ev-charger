@@ -46,12 +46,13 @@ GitHub Actions (every 15 min, :07 :22 :37 :52)
 |---|---|---|
 | `snapshots` | every run | National counts plus per-district and per-operator counts as JSON arrays. Keyed by LTA's `LastUpdatedTime`, so repeat calls are no-ops |
 | `station_days` | every run | Per station per Singapore day: snapshots seen, with a live status, and full (every reporting plug in use) |
+| `site_hours` | every run | "Popular times": per site (`siteKey()` in lib/chargers.ts: postcode + operator), running totals for each of the 168 hours of the week — plugs reporting, plugs in use, times full. One row per site, fixed size |
 | `stations` | daily | Station catalogue: name, operator key, postcode, district, location, first/last seen |
 | `plugs` | daily | Every charge point (`evCpId`): station, type, kW, listed price, first/last seen |
 | `price_changes` | daily | A charge point's LTA-listed price changed (before lib/priceCorrections.ts) |
 
-Expected size: roughly 150 MB a year, inside the 500 MB free limit for about three
-years. Check the real figure after the first week (Supabase → Database → Usage).
+Expected size: roughly 150 MB a year plus a fixed ~8 MB for `site_hours`, inside the
+500 MB free limit for about three years. Check the real figure after the first week (Supabase → Database → Usage).
 
 ### Setup (one-off)
 
@@ -93,6 +94,8 @@ size, and errors in the workflow runs and Vercel logs.
 | Sunday vs weekday | "Sundays are 18% busier than Mondays" | `snapshots` + holiday list |
 | Night owls | Share of charging between 10.30pm and 7am (HDB night parking hours) | `snapshots` |
 | Record moment | "Busiest moment on record: 3,402 plugs in use, Sat 12 Dec, 8.15pm" | `snapshots` |
+| Busier than usual | "14% busier than a usual Saturday at 10pm", under the live count | `snapshots` |
+| Popular times | Per-station bar chart of how busy it usually is each hour, in the station sheet (`in_use / plugs` per slot) | `site_hours` |
 
 Read through a cached `app/api/history/route.ts` that returns ready-to-render
 aggregates; hide the section until there's at least a week of data, and add the

@@ -30,6 +30,20 @@ create table if not exists public.station_days (
   primary key (day, station_id)
 );
 
+-- "Popular times": per site, running totals for each hour of the week in
+-- Singapore time. One row per site, 168 slots per array: index =
+-- day of week (0 = Sunday) × 24 + hour + 1, so slot 1 is Sunday 12am–1am.
+-- site_key is "<postcode>:<operator key>" (the station id if there's no
+-- postcode), so a site keeps its history when plugs are added. Only
+-- snapshots where the site reported a live status are counted.
+create table if not exists public.site_hours (
+  site_key    text primary key,
+  reporting   integer[] not null default array_fill(0, array[168]),  -- snapshots counted
+  plugs       integer[] not null default array_fill(0, array[168]),  -- sum of plugs reporting a status
+  in_use      integer[] not null default array_fill(0, array[168]),  -- sum of plugs in use
+  full_count  integer[] not null default array_fill(0, array[168])   -- snapshots with every reporting plug in use
+);
+
 -- Station catalogue, refreshed daily. station_id is Charger.id, which changes
 -- when a station's set of plugs changes; group by postal_code + operator to
 -- follow one site over time.
@@ -70,22 +84,34 @@ create table if not exists public.price_changes (
 
 alter table public.snapshots     enable row level security;
 alter table public.station_days  enable row level security;
+alter table public.site_hours    enable row level security;
 alter table public.stations      enable row level security;
 alter table public.plugs         enable row level security;
 alter table public.price_changes enable row level security;
 
-revoke all on public.snapshots, public.station_days, public.stations, public.plugs, public.price_changes
-  from anon, authenticated;
+revoke all on public.snapshots, public.station_days, public.site_hours, public.stations, public.plugs,
+  public.price_changes from anon, authenticated;
 
--- Record one snapshot and count it towards each station's day. Returns false,
--- changing nothing, if this LTA update was already recorded.
-create or replace function public.record_snapshot(snapshot jsonb, station_samples jsonb)
+-- The first version took two arguments; the third has a default, so callers
+-- of the old version keep working.
+drop function if exists public.record_snapshot(jsonb, jsonb);
+
+-- Record one snapshot, count it towards each station's day and each site's
+-- hour of the week. Returns false, changing nothing, if this LTA update was
+-- already recorded.
+create or replace function public.record_snapshot(
+  snapshot jsonb,
+  station_samples jsonb,
+  site_samples jsonb default '[]'::jsonb  -- [[site_key, plugs reporting, plugs in use, full (0/1)], ...]
+)
 returns boolean
 language plpgsql
 set search_path = ''
 as $$
 declare
   taken timestamptz := (snapshot ->> 'taken_at')::timestamptz;
+  sgt   timestamp   := taken at time zone 'Asia/Singapore';
+  slot  integer     := extract(dow from sgt)::integer * 24 + extract(hour from sgt)::integer + 1;
 begin
   insert into public.snapshots (taken_at, stations, plugs, free, in_use, no_status, kw_in_use, districts, operators)
   values (
@@ -111,6 +137,18 @@ begin
     samples    = d.samples + 1,
     reporting  = d.reporting + excluded.reporting,
     full_count = d.full_count + excluded.full_count;
+
+  insert into public.site_hours (site_key)
+  select s ->> 0 from jsonb_array_elements(site_samples) as s
+  on conflict (site_key) do nothing;
+
+  update public.site_hours as h set
+    reporting[slot]  = h.reporting[slot] + 1,
+    plugs[slot]      = h.plugs[slot] + (s ->> 1)::integer,
+    in_use[slot]     = h.in_use[slot] + (s ->> 2)::integer,
+    full_count[slot] = h.full_count[slot] + (s ->> 3)::integer
+  from jsonb_array_elements(site_samples) as s
+  where h.site_key = s ->> 0;
   return true;
 end;
 $$;
@@ -163,7 +201,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.record_snapshot(jsonb, jsonb) from public, anon, authenticated;
+revoke execute on function public.record_snapshot(jsonb, jsonb, jsonb) from public, anon, authenticated;
 revoke execute on function public.record_catalogue(date, jsonb, jsonb) from public, anon, authenticated;
-grant execute on function public.record_snapshot(jsonb, jsonb) to service_role;
+grant execute on function public.record_snapshot(jsonb, jsonb, jsonb) to service_role;
 grant execute on function public.record_catalogue(date, jsonb, jsonb) to service_role;

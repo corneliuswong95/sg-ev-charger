@@ -1,3 +1,4 @@
+import { siteKey } from '@/lib/chargers';
 import { resolveOperator } from '@/lib/operators';
 import { districtOf } from '@/lib/districts';
 import { liveStats } from '@/lib/stats';
@@ -14,6 +15,8 @@ import { rpc, select } from './supabase';
     LTA's own timestamp, so recording the same LTA update twice is a no-op.
   - station_days: per station per Singapore day, how many snapshots it was in,
     had a live status, and was full.
+  - site_hours: "popular times" — per site (siteKey(): postcode + operator),
+    running totals for each of the 168 hours of the week.
   - stations / plugs / price_changes: a catalogue refreshed once a day. Prices
     are recorded as LTA lists them, before lib/priceCorrections.ts.
 */
@@ -39,6 +42,8 @@ export interface SnapshotPayload {
   };
   /** [station id, had a live status (0/1), every reporting plug in use (0/1)] */
   stationSamples: [string, number, number][];
+  /** Reporting sites only: [site key, plugs reporting, plugs in use, full (0/1)] */
+  siteSamples: [string, number, number, number][];
   catalogue: { stations: CatalogueStation[]; plugs: CataloguePlug[] };
 }
 
@@ -86,6 +91,8 @@ export function buildPayload(batch: EvBatch, now = new Date()): SnapshotPayload 
   const districts = new Map<number, Counts>();
   const operators = new Map<string, Counts>();
   const stationSamples: [string, number, number][] = [];
+  // Several stations can share a site key (same postcode and operator).
+  const sites = new Map<string, { free: number; inUse: number }>();
   for (const c of chargers) {
     const counts: Counts = [c.total, c.available, c.occupied, c.offline];
     const district = districtOf(c.postalCode);
@@ -93,6 +100,14 @@ export function buildPayload(batch: EvBatch, now = new Date()): SnapshotPayload 
     add(operators, resolveOperator(c.operator).key, counts);
     const reporting = c.available + c.occupied > 0;
     stationSamples.push([c.id, reporting ? 1 : 0, reporting && c.available === 0 ? 1 : 0]);
+    const site = sites.get(siteKey(c)) ?? { free: 0, inUse: 0 };
+    site.free += c.available;
+    site.inUse += c.occupied;
+    sites.set(siteKey(c), site);
+  }
+  const siteSamples: [string, number, number, number][] = [];
+  for (const [key, s] of sites) {
+    if (s.free + s.inUse > 0) siteSamples.push([key, s.free + s.inUse, s.inUse, s.free === 0 ? 1 : 0]);
   }
 
   // LTA's timestamp is the dedupe key; without one, fall back to the current 5-minute slot.
@@ -111,6 +126,7 @@ export function buildPayload(batch: EvBatch, now = new Date()): SnapshotPayload 
       operators: [...operators].sort((a, b) => b[1][0] - a[1][0]).map(([key, c]) => [key, ...c]),
     },
     stationSamples,
+    siteSamples,
     catalogue: { stations, plugs: [...plugs.values()] },
   };
 }
@@ -122,6 +138,7 @@ export async function recordSnapshot(batch: EvBatch, now = new Date()): Promise<
   const recorded = await rpc<boolean>('record_snapshot', {
     snapshot: p.snapshot,
     station_samples: p.stationSamples,
+    site_samples: p.siteSamples,
   });
   const result: RecordResult = {
     takenAt: p.snapshot.taken_at,

@@ -32,6 +32,14 @@ export function matchesFilters(c: Charger, filters: FilterKey[]): boolean {
   return true;
 }
 
+/**
+ * Key for a site's history ("popular times"): postcode + operator, so it
+ * survives plugs being added, which changes `Charger.id`.
+ */
+export function siteKey(c: Charger): string {
+  return c.postalCode ? `${c.postalCode}:${resolveOperator(c.operator).key}` : c.id;
+}
+
 export function matchesOperator(c: Charger, operatorKey: string | null): boolean {
   if (!operatorKey) return true;
   return resolveOperator(c.operator).key === operatorKey;
