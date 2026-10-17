@@ -7,6 +7,7 @@ import Fabs from '@/components/Fabs';
 import ChargerSheet from '@/components/ChargerSheet';
 import StationListSheet from '@/components/StationListSheet';
 import PricesView from '@/components/PricesView';
+import StatsView from '@/components/StatsView';
 import TabBar, { type Tab } from '@/components/TabBar';
 import { BoltIcon } from '@/components/Icons';
 import type { MapHandle } from '@/components/MapView';
@@ -51,7 +52,8 @@ export default function Home() {
   const [refreshing, setRefreshing]   = useState(false);
   const [notice, setNotice]           = useState<Notice | null>(null);
   const [tab, setTab]                 = useState<Tab>('map');
-  const [pricesVisited, setPricesVisited] = useState(false);
+  // Prices and Stats mount on first visit and then stay mounted (hidden), keeping their state.
+  const [visited, setVisited]         = useState<Tab[]>(['map']);
   const [filters, setFilters]         = useState<FilterKey[]>([]);
   const [operator, setOperator]       = useState<string | null>(null);
   const [query, setQuery]             = useState('');
@@ -115,12 +117,12 @@ export default function Home() {
   }, []);
 
   // Keep hidden map controls out of the tab order and accessibility tree
-  // while the Prices tab covers them. (React 18 has no `inert` prop.)
+  // while the Prices or Stats tab covers them. (React 18 has no `inert` prop.)
   useEffect(() => {
     const el = mapUiRef.current;
     if (!el) return;
-    el.toggleAttribute('inert', tab === 'prices');
-    el.setAttribute('aria-hidden', String(tab === 'prices'));
+    el.toggleAttribute('inert', tab !== 'map');
+    el.setAttribute('aria-hidden', String(tab !== 'map'));
   }, [tab]);
 
   const chargers = data.chargers;
@@ -206,7 +208,7 @@ export default function Home() {
 
   function changeTab(t: Tab) {
     setTab(t);
-    if (t === 'prices') setPricesVisited(true);
+    setVisited(v => (v.includes(t) ? v : [...v, t]));
   }
 
   function locateUser(fly = true) {
@@ -302,9 +304,23 @@ export default function Home() {
         />
       </div>
 
-      {pricesVisited && (
+      {visited.includes('prices') && (
         <div hidden={tab !== 'prices'}>
           <PricesView
+            chargers={chargers}
+            updatedAt={data.updatedAt}
+            userPos={userPos}
+            locationDenied={locationDenied}
+            onRequestLocation={() => locateUser(false)}
+            onOpenStation={handleSelect}
+            onShowOperator={showOperator}
+          />
+        </div>
+      )}
+
+      {visited.includes('stats') && (
+        <div hidden={tab !== 'stats'}>
+          <StatsView
             chargers={chargers}
             updatedAt={data.updatedAt}
             userPos={userPos}

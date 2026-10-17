@@ -70,7 +70,7 @@ LTA's feed has no idle fees or time-of-day pricing, so these are curated from ea
 
 ### Client state lives in `app/page.tsx`
 
-[app/page.tsx](app/page.tsx) is the single state holder: data, loading/refreshing/error, tab (`map` | `prices`), filters, operator, search query, selected station id, list expansion, user position. The selection is stored as an **id** and looked up in the latest data so an open sheet updates on refresh. Child components are presentational and receive callbacks. Keep new state here unless it's strictly local.
+[app/page.tsx](app/page.tsx) is the single state holder: data, loading/refreshing/error, tab (`map` | `prices` | `stats`, each non-map tab mounted on first visit), filters, operator, search query, selected station id, list expansion, user position. The selection is stored as an **id** and looked up in the latest data so an open sheet updates on refresh. Child components are presentational and receive callbacks. Keep new state here unless it's strictly local.
 
 ### Map is client-only and imperatively controlled
 
@@ -83,6 +83,10 @@ Clustering uses `react-leaflet-cluster@2` — v4 requires React 19 / react-leafl
 ### Prices tab (`components/PricesView.tsx`)
 
 Ranks stations by their cheapest listed $/kWh for the chosen current (AC/DC). Stations listed as free are shown separately, stations with no price are counted but not ranked, and "typical" is the median. "By operator" uses each operator's median price and range. Time-based fee tags come from `timeFeeTag()` in [lib/tariffs.ts](lib/tariffs.ts): yellow when a fee definitely applies, outlined when it may. Each expanded operator row has "Show … on the map", which calls `showOperator()` in `app/page.tsx` (clears search and filters, sets the operator filter, fits the map to that operator's stations).
+
+### Stats tab (`components/StatsView.tsx`)
+
+Fun facts from the current snapshot only: live status, a postal-district league ([lib/districts.ts](lib/districts.ts), keyed by the postcode's first two digits), records (biggest, fastest, loner, hotspot, four corners), price spread and "kopi index", fee and free-Sunday-parking shares (`CarParkRef.freeSunday`, HDB only), operator/plug-type/AC-DC/car park mix, and stats near the user. All figures come from `snapshotStats()` / `nearbyStats()` in [lib/stats.ts](lib/stats.ts); the assumptions behind conversions (`KWH_PER_100KM`, `FULL_KWH`, `KOPI_PRICE`) are exported there and stated in the UI's footnotes — keep them in sync. Bars are one colour (`--sign`) with every value labelled; the status stack keeps grey between green and red so the two never touch (colour-blind safety). There is no history yet — see [docs/history-stats.md](docs/history-stats.md) before adding time-based stats.
 
 ### Detail sheet (`components/ChargerSheet.tsx`)
 

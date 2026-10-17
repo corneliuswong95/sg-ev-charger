@@ -2,7 +2,7 @@ import type { CarParkRef, HdbCarPark, ParkingDetails, RateLine } from '@/lib/typ
 import { distanceKm } from '@/lib/geo';
 import { titleCase } from '@/lib/format';
 import {
-  HDB_RATES_SOURCE, URA_COUPONS_SOURCE, hdbRateLines, paymentText, uraRateLines,
+  HDB_RATES_SOURCE, URA_COUPONS_SOURCE, hasFreeParking, hdbRateLines, paymentText, uraRateLines,
 } from '@/lib/parking';
 import { CURATED_CAR_PARKS, curatedByLtaName, findCuratedCarPark, type CuratedCarPark } from '@/lib/curatedParking';
 import type { HdbIndex } from './hdb';
@@ -100,7 +100,12 @@ export function buildParkingMatcher(s: ParkingSources): ParkingMatcher {
 
   return (lat, lng, address, name) => {
     const h = s.hdb?.match(lat, lng, address, name);
-    if (h) return { ref: { kind: 'hdb', code: h.code, central: h.central }, hdb: h };
+    if (h) {
+      return {
+        ref: { kind: 'hdb', code: h.code, central: h.central, freeSunday: hasFreeParking(h.freeParking) },
+        hdb: h,
+      };
+    }
 
     const curated = findCuratedCarPark(name, address);
     if (curated) return { ref: { kind: curated.kind, code: curated.id }, hdb: null };

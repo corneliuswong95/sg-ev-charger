@@ -45,6 +45,9 @@ export const MapIcon = (p: P) => (
 export const TagIcon = (p: P) => (
   <Svg {...p}><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9Z" /><circle cx="8" cy="8" r="1.5" fill="currentColor" /></Svg>
 );
+export const ChartIcon = (p: P) => (
+  <Svg {...p}><path d="M3 20h18" /><path d="M6 16v-5M12 16V5M18 16v-8" /></Svg>
+);
 export const LocateIcon = (p: P) => (
   <Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></Svg>
 );

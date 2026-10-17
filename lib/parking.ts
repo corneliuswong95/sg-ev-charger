@@ -11,9 +11,15 @@ export const HDB_CENTRAL_CODES = new Set([
   'KAS', 'PRM', 'SLS', 'SR1', 'SR2', 'TPM', 'UCS', 'WCB',
 ]);
 
+/** HDB's free parking field is "NO" or a Sunday/PH window like "SUN & PH FR 7AM-10.30PM". */
+export function hasFreeParking(raw: string): boolean {
+  const s = raw.trim().toUpperCase();
+  return s !== '' && s !== 'NO';
+}
+
 function freeParkingText(raw: string): string {
   const s = raw.toUpperCase();
-  if (s === 'NO' || !s) return 'None';
+  if (!hasFreeParking(s)) return 'None';
   const m = s.match(/FR\s+(\S+)-(\S+)/);
   const hours = m ? `${m[1].toLowerCase()} to ${m[2].toLowerCase()}` : '';
   return `Sundays and public holidays${hours ? `, ${hours}` : ''}`;

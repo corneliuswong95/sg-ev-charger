@@ -30,6 +30,8 @@ export interface CarParkRef {
   code: string;
   /** Inside HDB's Central Area, where daytime rates are higher (HDB only). */
   central?: boolean;
+  /** Parking is free on Sundays and public holidays (HDB only). */
+  freeSunday?: boolean;
 }
 
 export interface Charger {
