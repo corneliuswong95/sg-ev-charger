@@ -4,7 +4,8 @@ The Stats tab ([components/StatsView.tsx](../components/StatsView.tsx)) only kno
 latest LTA snapshot. This is the plan for stats over time, and the record of what's
 built so far.
 
-**Status:** the collector (phase 1) is built. The charts (phase 3) aren't.
+**Status:** the collector (phase 1) and the phase 3 charts are built. The charts went in
+early and fill in as data arrives; each one says when it will be ready until it has enough.
 
 ## Constraints
 
@@ -86,7 +87,29 @@ writes keep it awake. If it ever pauses, restore it from the Supabase dashboard.
 **Phase 2 — let it collect (1–2 weeks).** Check for gaps in `snapshots`, database
 size, and errors in the workflow runs and Vercel logs.
 
-**Phase 3 — Trends section in the Stats tab (after about a week of data).**
+**Phase 3 — Trends section and popular times (built).**
+
+Read side: `history_trends()` in db/history.sql works out everything below in the
+database (so responses stay small however long the history gets);
+[lib/server/trends.ts](../lib/server/trends.ts) calls it and reads `site_hours`;
+`/api/history/trends[?district=N]` and `/api/history/site/[key]` serve them, cached at
+the CDN for 5 and 15 minutes. UI: [components/TrendsSection.tsx](../components/TrendsSection.tsx)
+(Stats tab, after "Right now") and [components/PopularTimes.tsx](../components/PopularTimes.tsx)
+(station sheet). Both drop out quietly if Supabase isn't configured (the routes return 503).
+Public holidays come from [lib/holidays.ts](../lib/holidays.ts) — add each new year when MOM
+publishes it.
+
+| Shown | Ready after |
+|---|---|
+| Last 24 hours line, busiest moment so far | the first snapshots |
+| Busiest-times heatmap | fills in over a week; reliable after ~3 weeks |
+| Night owls | one full day |
+| Sundays vs weekdays | the first Sunday and two weekdays |
+| "Busier than usual" line under the live count | the same weekday and hour seen on 3 earlier days |
+| Popular times, typical day | about a day (4 snapshots per hour) |
+| Popular times, per weekday | about two weeks (8 snapshots for most of that weekday's hours) |
+
+Originally planned:
 
 | Stat | Example | From |
 |---|---|---|

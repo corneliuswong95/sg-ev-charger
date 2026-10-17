@@ -201,6 +201,81 @@ begin
 end;
 $$;
 
+-- Everything the Stats tab's Trends section shows, for all of Singapore
+-- (p_district null) or one postal district. Shares are the fraction of plugs
+-- reporting a status that are in use. p_holidays is a JSON array of
+-- 'YYYY-MM-DD' public holidays (lib/holidays.ts), counted with Sundays.
+create or replace function public.history_trends(p_district integer default null, p_holidays jsonb default '[]'::jsonb)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with base as (
+    select taken_at, free, in_use from public.snapshots where p_district is null
+    union all
+    select s.taken_at, (d ->> 2)::integer, (d ->> 3)::integer
+    from public.snapshots as s, jsonb_array_elements(s.districts) as d
+    where p_district is not null and (d ->> 0)::integer = p_district
+  ),
+  b as (
+    select taken_at, free, in_use,
+           taken_at at time zone 'Asia/Singapore' as sgt,
+           in_use::double precision / nullif(free + in_use, 0) as share
+    from base
+  ),
+  latest as (select max(taken_at) as t, max(sgt) as sgt from b),
+  holidays as (select value::date as day from jsonb_array_elements_text(p_holidays)),
+  cells as (
+    select extract(dow from sgt)::integer as dow, extract(hour from sgt)::integer as hour,
+           avg(share) as share, count(*) as samples, count(distinct sgt::date) as days
+    from b
+    group by 1, 2
+  ),
+  kinds as (
+    select case
+             when extract(dow from sgt) = 0 or sgt::date in (select day from holidays) then 'rest'
+             when extract(dow from sgt) between 1 and 5 then 'work'
+           end as kind,
+           share, sgt::date as day
+    from b
+  )
+  select jsonb_build_object(
+    'since',     (select min(taken_at) from b),
+    'latest',    (select t from latest),
+    'snapshots', (select count(*) from b),
+    'days',      (select count(distinct sgt::date) from b),
+    'last24h',   coalesce((
+                   select jsonb_agg(jsonb_build_array(taken_at, in_use, free + in_use) order by taken_at)
+                   from b where taken_at > (select t from latest) - interval '24 hours'
+                 ), '[]'::jsonb),
+    'record',    (select jsonb_build_object('t', taken_at, 'inUse', in_use, 'reporting', free + in_use)
+                  from b order by in_use desc, taken_at limit 1),
+    'cells',     coalesce((
+                   select jsonb_agg(jsonb_build_array(dow, hour, round(share::numeric, 4), samples, days) order by dow, hour)
+                   from cells where share is not null
+                 ), '[]'::jsonb),
+    'usualNow',  (select jsonb_build_object('share', round(avg(b.share)::numeric, 4), 'days', count(distinct b.sgt::date))
+                  from b, latest
+                  where extract(dow from b.sgt) = extract(dow from latest.sgt)
+                    and extract(hour from b.sgt) = extract(hour from latest.sgt)
+                    and b.sgt::date < latest.sgt::date),
+    'night',     (select jsonb_build_object(
+                    'night', sum(in_use) filter (where sgt::time >= '22:30' or sgt::time < '07:00'),
+                    'all', sum(in_use))
+                  from b),
+    'restVsWork', (select jsonb_build_object(
+                    'rest', round((avg(share) filter (where kind = 'rest'))::numeric, 4),
+                    'restDays', count(distinct day) filter (where kind = 'rest'),
+                    'work', round((avg(share) filter (where kind = 'work'))::numeric, 4),
+                    'workDays', count(distinct day) filter (where kind = 'work'))
+                  from kinds)
+  );
+$$;
+
+revoke execute on function public.history_trends(integer, jsonb) from public, anon, authenticated;
+grant execute on function public.history_trends(integer, jsonb) to service_role;
+
 revoke execute on function public.record_snapshot(jsonb, jsonb, jsonb) from public, anon, authenticated;
 revoke execute on function public.record_catalogue(date, jsonb, jsonb) from public, anon, authenticated;
 grant execute on function public.record_snapshot(jsonb, jsonb, jsonb) to service_role;

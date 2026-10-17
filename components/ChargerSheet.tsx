@@ -8,6 +8,7 @@ import { formatKw, formatPrice, formatTime } from '@/lib/format';
 import { feeApplies, tariffFor, TARIFFS_CHECKED } from '@/lib/tariffs';
 import OperatorIcon from './OperatorIcon';
 import CarParkInfo from './CarParkInfo';
+import PopularTimes from './PopularTimes';
 import { CheckIcon, CloseIcon, CopyIcon, NavigateIcon } from './Icons';
 
 interface Props {
@@ -226,6 +227,8 @@ function SheetBody({
           </p>
           {tariff?.priceCaveat && <div className="fee-box price-caveat">{tariff.priceCaveat}</div>}
         </section>
+
+        <PopularTimes charger={c} />
 
         <section className="section">
           <h3 className="section-title">Extra charges</h3>

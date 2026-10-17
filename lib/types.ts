@@ -76,6 +76,39 @@ export interface HdbCarPark {
   central: boolean;
 }
 
+/** /api/history/trends — for all of Singapore or one postal district. */
+export interface HistoryTrends {
+  /** First and latest recorded snapshot (ISO), null before any data. */
+  since: string | null;
+  latest: string | null;
+  snapshots: number;
+  /** Distinct Singapore days with data. */
+  days: number;
+  /** [ISO time, plugs in use, plugs reporting a status], last 24 hours. */
+  last24h: [string, number, number][];
+  /** Most plugs in use in any snapshot so far. */
+  record: { t: string; inUse: number; reporting: number } | null;
+  /** [day of week (0 = Sunday), hour, mean share of reporting plugs in use, snapshots, distinct days]. */
+  cells: [number, number, number, number, number][];
+  /** Mean share in use at the latest snapshot's weekday and hour, on earlier days. */
+  usualNow: { share: number | null; days: number };
+  /** Plugs-in-use summed over snapshots: 10.30pm–7am vs all day. */
+  night: { night: number | null; all: number | null };
+  /** Mean share in use on Sundays and public holidays ("rest") vs Mon–Fri ("work"). */
+  restVsWork: { rest: number | null; restDays: number; work: number | null; workDays: number };
+}
+
+/** /api/history/site/[key] — one site's running totals per hour of the week. */
+export interface PopularTimes {
+  /** When history collection began (ISO). */
+  since: string | null;
+  /** 168 slots each; index = day of week (0 = Sunday) × 24 + hour, Singapore time. */
+  reporting: number[];
+  plugs: number[];
+  inUse: number[];
+  full: number[];
+}
+
 export interface RateLine {
   label: string;
   value: string;

@@ -1688,6 +1688,11 @@ a {
   margin: 0 16px 12px;
 }
 
+/* An odd tile out spans the row instead of leaving a gap. */
+.stats-tiles > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .stats-tile {
   display: flex;
   flex-direction: column;
@@ -2116,6 +2121,259 @@ button.bar-row:hover {
 
 .stats-notes li + li {
   margin-top: 4px;
+}
+
+/* ─── Trends (history) and popular times ─── */
+.plate-usual {
+  display: block;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.trends-intro {
+  margin: 0 16px 10px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.trends-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.trends-scope select {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Hold the previous charts while a district loads, rather than flashing. */
+.trends-body.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.trends-credit {
+  margin: 4px 16px 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.chart-empty {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.chart-readout {
+  margin-top: 6px;
+  min-height: 1.45em;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.chart-readout strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.line-chart {
+  margin-top: 10px;
+}
+
+.line-chart svg {
+  display: block;
+  touch-action: pan-y;
+}
+
+.chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  font-family: var(--num);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  fill: var(--ink-3);
+}
+
+.chart-area {
+  fill: var(--sign);
+  opacity: 0.1;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--sign);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-dot {
+  fill: var(--sign);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.chart-cross {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+}
+
+/* Heatmap: day × hour, one blue ramp; empty cells are outlines only. */
+.heatmap {
+  margin-top: 12px;
+  touch-action: pan-y;
+}
+
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 34px repeat(24, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.heatmap-day {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  line-height: 16px;
+}
+
+.heatmap-cell {
+  height: 16px;
+  border-radius: 3px;
+}
+
+.heatmap-cell.empty {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.heatmap-cell.active {
+  outline: 2px solid var(--ink);
+  outline-offset: 0;
+}
+
+.heatmap-hours span {
+  font-family: var(--num);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.heatmap-scale {
+  width: 64px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--sign) 12%, var(--sign-soft)), var(--sign));
+}
+
+.heatmap-legend .heatmap-cell {
+  width: 14px;
+  height: 10px;
+  margin-left: 8px;
+}
+
+/* Popular times (station sheet): lighter bars, the current hour in full blue. */
+.popular-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.popular-days .chip {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.popular-chart {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 2px;
+  align-items: end;
+  height: 72px;
+  border-bottom: 1px solid var(--line-strong);
+  touch-action: pan-y;
+}
+
+.popular-bar {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.popular-bar i {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in oklab, var(--sign) 45%, var(--sign-soft));
+}
+
+.popular-bar.now i {
+  background: var(--sign);
+}
+
+.popular-bar.active i {
+  background: var(--sign-press);
+}
+
+.popular-bar.empty::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.popular-hours {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 4px;
+  font-family: var(--num);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.popular-readout {
+  margin-top: 8px;
+  min-height: 1.45em;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.popular-readout strong {
+  color: var(--ink);
 }
 
 /* ─── Loading / toast ─── */

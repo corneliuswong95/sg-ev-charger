@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import type { Charger } from '@/lib/types';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Charger, HistoryTrends } from '@/lib/types';
 import { FAST_KW } from '@/lib/chargers';
 import { resolveOperator } from '@/lib/operators';
 import { formatDistance, formatKw, formatPrice, formatTime } from '@/lib/format';
@@ -11,6 +11,7 @@ import {
   type CarParkMixKey, type DistrictRow, type PriceSpread, type ShareRow,
 } from '@/lib/stats';
 import OperatorIcon from './OperatorIcon';
+import TrendsSection, { busierThanUsual } from './TrendsSection';
 import { LocateIcon } from './Icons';
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
 
 const SECTIONS = [
   { id: 'stats-now', label: 'Right now' },
+  { id: 'stats-trends', label: 'Trends' },
   { id: 'stats-records', label: 'Records' },
   { id: 'stats-costs', label: 'Costs' },
   { id: 'stats-who', label: 'Who’s who' },
@@ -33,6 +35,7 @@ const SECTIONS = [
 ];
 
 const TOP_OPERATORS = 8;
+const TRENDS_REFRESH_MS = 5 * 60 * 1000;
 const TOP_PLUG_TYPES = 5;
 const LEAGUE_ROWS = 8;
 /** Further than this from every charger, the user is probably not in Singapore. */
@@ -86,6 +89,7 @@ export default function StatsView({
     [chargers, userPos, stats.districts],
   );
   const time = formatTime(updatedAt);
+  const trends = useTrends();
 
   function jump(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -95,6 +99,7 @@ export default function StatsView({
   const reporting = live.free + live.inUse;
   const plugsTotal = split.acPlugs + split.dcPlugs;
   const kwTotal = split.acKw + split.dcKw;
+  const usual = typeof trends === 'object' ? busierThanUsual(trends, reporting > 0 ? live.inUse / reporting : null) : null;
 
   return (
     <main className="stats-view" aria-label="Charging stats">
@@ -109,7 +114,7 @@ export default function StatsView({
 
         <nav className="prices-controls" aria-label="Jump to section">
           <div className="chips">
-            {SECTIONS.map(s => (
+            {SECTIONS.filter(s => s.id !== 'stats-trends' || trends !== 'off').map(s => (
               <button key={s.id} className="chip" onClick={() => jump(s.id)}>{s.label}</button>
             ))}
           </div>
@@ -133,6 +138,7 @@ export default function StatsView({
                 </span>
                 <span className="plate-where">
                   Out of {int(live.plugs)} public plugs at {int(chargers.length)} stations.
+                  {usual && <strong className="plate-usual">{usual}.</strong>}
                 </span>
               </div>
 
@@ -154,6 +160,17 @@ export default function StatsView({
 
               <DistrictLeague rows={stats.districts} />
             </Section>
+
+            {/* ─── Trends (history) ─── */}
+            {trends !== 'off' && (
+              <Section id="stats-trends" title="Trends">
+                {trends === 'loading' && <p className="trends-intro">Loading trends…</p>}
+                {trends === 'error' && <p className="trends-intro">Couldn’t load trends right now.</p>}
+                {typeof trends === 'object' && (
+                  <TrendsSection national={trends} districts={stats.districts.map(d => ({ no: d.no, name: d.name }))} />
+                )}
+              </Section>
+            )}
 
             {/* ─── Hall of fame ─── */}
             {rec && (
@@ -309,6 +326,32 @@ export default function StatsView({
       </div>
     </main>
   );
+}
+
+/** Trends for all of Singapore, refreshed every 5 minutes. 'off' when history isn't set up. */
+function useTrends(): HistoryTrends | 'loading' | 'error' | 'off' {
+  const [trends, setTrends] = useState<HistoryTrends | 'loading' | 'error' | 'off'>('loading');
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/history/trends');
+        if (!alive) return;
+        if (res.status === 503) return setTrends('off');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as HistoryTrends;
+        if (alive) setTrends(body);
+      } catch (err) {
+        console.error('[trends]', err);
+        // Keep showing the last good data if a refresh fails.
+        if (alive) setTrends(t => (typeof t === 'object' ? t : 'error'));
+      }
+    }
+    load();
+    const id = setInterval(load, TRENDS_REFRESH_MS);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return trends;
 }
 
 // ─── Building blocks ───
